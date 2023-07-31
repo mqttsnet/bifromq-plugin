@@ -38,7 +38,11 @@ Bifromq官方WIKI：https://bifromq.io/zh-Hans/docs/plugin/plugin/
 
 #### 3.2 配置插件
 将打包好的插件放置于Bifromq的插件目录下，如：/opt/bifromq/plugins/，并在Bifromq的配置文件中配置插件，如：
+```bifromq/plugins
+注：其他无关插件请不要放置于插件目录下，否则会导致Bifromq启动失败
+```
+
 ```conf/standalone.yaml
 # 插件配置
-authProviderFQN: bifromq.plugin.AuthProvider
+authProviderFQN: bifromq.plugin.provider.AuthProvider
 

@@ -21,8 +21,9 @@ import java.util.concurrent.*;
 @Slf4j
 public final class AuthProvider implements IAuthProvider {
 
-    // You should fill in the thinglinks platform authentication interface that you want to call
-    // private final String clientConnectionUrl = "http://frp3.xiaonannet.com:6903/api/link/deviceOpen/anyTenant/clientConnectionAuthentication";
+    /**
+     * You should fill in the thinglinks platform authentication interface that you want to call
+     */
     private final String clientConnectionUrl;
 
     private final ThreadPoolExecutor executor;
