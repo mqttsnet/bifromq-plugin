@@ -8,6 +8,7 @@ import com.baidu.bifromq.plugin.eventcollector.EventType;
 import com.baidu.bifromq.plugin.eventcollector.IEventCollector;
 import com.baidu.bifromq.plugin.eventcollector.distservice.DistError;
 import com.baidu.bifromq.plugin.eventcollector.distservice.Disted;
+import com.baidu.bifromq.plugin.eventcollector.mqttbroker.PingReq;
 import com.baidu.bifromq.plugin.eventcollector.mqttbroker.clientconnected.ClientConnected;
 import com.baidu.bifromq.plugin.eventcollector.mqttbroker.clientdisconnect.ByClient;
 import com.baidu.bifromq.plugin.eventcollector.mqttbroker.clientdisconnect.ByServer;
@@ -33,12 +34,9 @@ import java.util.concurrent.*;
 @Extension
 @Slf4j
 public final class EventKafkaProvider implements IEventCollector {
-    private static final int CORE_POOL_SIZE = Runtime.getRuntime().availableProcessors() * 10;
-    private static final int MAX_POOL_SIZE = CORE_POOL_SIZE * 20;
-    private static final long KEEP_ALIVE_TIME = 60L;
 
     private final KafkaProducer<String, String> producer;
-    private final ExecutorService executor;
+    private final ThreadPoolExecutor executor;
 
     private static final Map<EventType, String> TOPIC_MAP = new EnumMap<>(EventType.class);
 
@@ -54,8 +52,18 @@ public final class EventKafkaProvider implements IEventCollector {
     }
 
     public EventKafkaProvider() {
-        this.executor = new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE, KEEP_ALIVE_TIME,
-                TimeUnit.SECONDS, new LinkedBlockingQueue<>(), Executors.defaultThreadFactory(), new ThreadPoolExecutor.AbortPolicy());
+        
+        // Create a thread pool based on the actual requirements
+        int corePoolSize = Runtime.getRuntime().availableProcessors() * 10;
+        int maximumPoolSize = corePoolSize * 20;
+        long keepAliveTime = 60L;
+        TimeUnit unit = TimeUnit.SECONDS;
+        BlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>();
+        ThreadFactory threadFactory = Executors.defaultThreadFactory();
+        RejectedExecutionHandler handler = new ThreadPoolExecutor.AbortPolicy();
+
+        this.executor = new ThreadPoolExecutor(corePoolSize, maximumPoolSize, keepAliveTime,
+                unit, workQueue, threadFactory, handler);
 
         Properties kafkaProperties = new Properties();
         kafkaProperties.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
@@ -67,6 +75,7 @@ public final class EventKafkaProvider implements IEventCollector {
 
     @Override
     public void report(Event<?> event) {
+
         log.info("Received event - eventType: {}, event: {}", event.type(), event);
 
         if (!TOPIC_MAP.containsKey(event.type())) {
@@ -150,7 +159,7 @@ public final class EventKafkaProvider implements IEventCollector {
             messageDetails.put("tenantId", tenantId);
             messageDetails.put("clientId", metadataMap.get("clientId"));
             messageDetails.put("success", "success");
-            messageDetails.put("event", event.type());
+            messageDetails.put("event", "CONNECT");
             messageDetails.put("address", metadataMap.get("address"));
             messageDetails.put("keepAliveTimeSeconds", keepAliveTimeSeconds);
             messageDetails.put("timestamp", System.currentTimeMillis());
@@ -166,7 +175,6 @@ public final class EventKafkaProvider implements IEventCollector {
 
     /*
      * 订阅成功
-     *
      * */
     private void handleSubAckedEvent(Event<?> event) {
         SubAcked subAcked = (SubAcked) event.clone();
@@ -184,7 +192,7 @@ public final class EventKafkaProvider implements IEventCollector {
             messageDetails.put("messageId", subAcked.messageId());
             messageDetails.put("topic", subAcked.topicFilter().get(0));
             messageDetails.put("success", "success");
-            messageDetails.put("event", event.type());
+            messageDetails.put("event", "SUBSCRIBE");
             messageDetails.put("address", metadataMap.get("address"));
             messageDetails.put("timestamp", System.currentTimeMillis());
 
@@ -200,7 +208,6 @@ public final class EventKafkaProvider implements IEventCollector {
 
     /*
      * 取消订阅
-     *
      * */
     private void handleUnsubAckedEvent(Event<?> event) {
         UnsubAcked unsubAcked = (UnsubAcked) event.clone();
@@ -218,7 +225,7 @@ public final class EventKafkaProvider implements IEventCollector {
             messageDetails.put("messageId", unsubAcked.messageId());
             messageDetails.put("topic", unsubAcked.topicFilter().get(0));
             messageDetails.put("success", "success");
-            messageDetails.put("event", event.type());
+            messageDetails.put("event", "UNSUBSCRIBE");
             messageDetails.put("address", metadataMap.get("address"));
             messageDetails.put("timestamp", System.currentTimeMillis());
 
@@ -233,7 +240,6 @@ public final class EventKafkaProvider implements IEventCollector {
 
     /*
      * 客户端的遗嘱消息已被分发
-     *
      * */
     private void handleDistedEvent(Event<?> event) {
         Disted disted = (Disted) event.clone();
@@ -257,6 +263,7 @@ public final class EventKafkaProvider implements IEventCollector {
                     messageDetails.put("messageId", messageId);
                     messageDetails.put("qos", pubQoSValue);
                     messageDetails.put("timestamp", timestamp);
+                    messageDetails.put("event", "PUBLISH");
                     messageDetails.put("time", timestamp);
                     messageDetails.put("expireTimestamp", expireTimestamp);
                     messageDetails.put("payload", payloadStr);
@@ -275,7 +282,6 @@ public final class EventKafkaProvider implements IEventCollector {
 
     /*
      * 消息分发错误
-     *
      * */
     private void handleDistErrorEvent(Event<?> event) {
         DistError distError = (DistError) event.clone();
@@ -286,7 +292,7 @@ public final class EventKafkaProvider implements IEventCollector {
         messageDetails.put("clientId", distError.reqId());
         messageDetails.put("message", distError.messages().toString());
         messageDetails.put("success", "success");
-        messageDetails.put("event", event.type());
+        messageDetails.put("event", "ERROR");
         messageDetails.put("reqId", distError.reqId());
         messageDetails.put("code", distError.code());
         messageDetails.put("timestamp", System.currentTimeMillis());
@@ -301,8 +307,7 @@ public final class EventKafkaProvider implements IEventCollector {
     }
 
     /*
-     * 客户端主动发送了DISCONNECT消息，断开连接
-     *
+     * 客户端主动发送了DISCONNECT消息，断开连接。
      * */
     private void handleByClientEvent(Event<?> event) {
         ByClient byClient = (ByClient) event.clone();
@@ -318,7 +323,7 @@ public final class EventKafkaProvider implements IEventCollector {
             messageDetails.put("tenantId", tenantId);
             messageDetails.put("clientId", metadataMap.get("clientId"));
             messageDetails.put("success", "success");
-            messageDetails.put("event", event.type());
+            messageDetails.put("event", "DISCONNECT");
             messageDetails.put("address", metadataMap.get("address"));
             messageDetails.put("timestamp", System.currentTimeMillis());
 
@@ -332,8 +337,7 @@ public final class EventKafkaProvider implements IEventCollector {
     }
 
     /*
-     * 客户端被服务器踢下线，可能是因为另一个同样标识符的客户端连接到了服务器
-     *
+     * 客户端被服务器踢下线，可能是因为另一个同样标识符的客户端连接到了服务器。
      * */
     private void handleByServerEvent(Event<?> event) {
         ByServer byServer = (ByServer) event.clone();
@@ -349,7 +353,7 @@ public final class EventKafkaProvider implements IEventCollector {
             messageDetails.put("tenantId", tenantId);
             messageDetails.put("clientId", metadataMap.get("clientId"));
             messageDetails.put("success", "success");
-            messageDetails.put("event", event.type());
+            messageDetails.put("event", "CLOSE");
             messageDetails.put("address", metadataMap.get("address"));
             messageDetails.put("timestamp", System.currentTimeMillis());
 
@@ -363,7 +367,7 @@ public final class EventKafkaProvider implements IEventCollector {
     }
 
     /*
-     *  客户端被服务器踢下线，可能是因为另一个同样标识符的客户端连接到了服务器
+     *  客户端被服务器踢下线，可能是因为另一个同样标识符的客户端连接到了服务器。
      *
      * */
     private void handleKickedEvent(Event<?> event) {
@@ -380,7 +384,7 @@ public final class EventKafkaProvider implements IEventCollector {
             messageDetails.put("tenantId", tenantId);
             messageDetails.put("clientId", metadataMap.get("clientId"));
             messageDetails.put("success", "success");
-            messageDetails.put("event", event.type());
+            messageDetails.put("event", "CLOSE");
             messageDetails.put("address", metadataMap.get("address"));
             messageDetails.put("timestamp", System.currentTimeMillis());
 
@@ -394,20 +398,27 @@ public final class EventKafkaProvider implements IEventCollector {
     }
 
     /*
-    * 消息生产
-    *
-    * */
+     * 消息生产
+     *
+     * */
     private void sendEventToKafka(String topic, String message) {
+
+        log.info("topic:{},message:{}", topic, message);
+
         if (CharSequenceUtil.isBlank(topic) || CharSequenceUtil.isBlank(message)) {
             log.warn("Cannot send null event to Kafka.");
             return;
         }
+
+        log.info("topic:{},start", topic);
+
         producer.send(new ProducerRecord<>(topic, message), (recordMetadata, e) -> {
             if (e != null) {
                 log.error("Error occurred while producing message to topic {}. Exception: ", recordMetadata.topic(), e);
             } else {
                 log.info("Message successfully sent to topic {}.", recordMetadata.topic());
             }
+            log.info("topic:{},end", topic);
         });
     }
 }
