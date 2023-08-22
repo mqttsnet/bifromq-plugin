@@ -1,14 +1,17 @@
 package bifromq.plugin.provider;
 
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.function.Consumer;
+
 import bifromq.plugin.config.ConfigUtil;
+import bifromq.plugin.utils.TaskQueue;
 import cn.hutool.core.text.CharSequenceUtil;
-import com.alibaba.fastjson2.JSON;
 import com.baidu.bifromq.plugin.eventcollector.Event;
 import com.baidu.bifromq.plugin.eventcollector.EventType;
 import com.baidu.bifromq.plugin.eventcollector.IEventCollector;
 import com.baidu.bifromq.plugin.eventcollector.distservice.DistError;
 import com.baidu.bifromq.plugin.eventcollector.distservice.Disted;
-import com.baidu.bifromq.plugin.eventcollector.mqttbroker.PingReq;
 import com.baidu.bifromq.plugin.eventcollector.mqttbroker.clientconnected.ClientConnected;
 import com.baidu.bifromq.plugin.eventcollector.mqttbroker.clientdisconnect.ByClient;
 import com.baidu.bifromq.plugin.eventcollector.mqttbroker.clientdisconnect.ByServer;
@@ -19,7 +22,6 @@ import com.baidu.bifromq.type.PublisherMessagePack;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.protobuf.ByteString;
-import com.google.protobuf.StringValue;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -27,16 +29,12 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.pf4j.Extension;
 
-import java.nio.ByteBuffer;
-import java.util.*;
-import java.util.concurrent.*;
-
 @Extension
 @Slf4j
 public final class EventKafkaProvider implements IEventCollector {
 
     private final KafkaProducer<String, String> producer;
-    private final ThreadPoolExecutor executor;
+    TaskQueue taskQueue = new TaskQueue();
 
     private static final Map<EventType, String> TOPIC_MAP = new EnumMap<>(EventType.class);
 
@@ -52,18 +50,6 @@ public final class EventKafkaProvider implements IEventCollector {
     }
 
     public EventKafkaProvider() {
-        
-        // Create a thread pool based on the actual requirements
-        int corePoolSize = Runtime.getRuntime().availableProcessors() * 10;
-        int maximumPoolSize = corePoolSize * 20;
-        long keepAliveTime = 60L;
-        TimeUnit unit = TimeUnit.SECONDS;
-        BlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>();
-        ThreadFactory threadFactory = Executors.defaultThreadFactory();
-        RejectedExecutionHandler handler = new ThreadPoolExecutor.AbortPolicy();
-
-        this.executor = new ThreadPoolExecutor(corePoolSize, maximumPoolSize, keepAliveTime,
-                unit, workQueue, threadFactory, handler);
 
         Properties kafkaProperties = new Properties();
         kafkaProperties.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
@@ -71,12 +57,12 @@ public final class EventKafkaProvider implements IEventCollector {
         kafkaProperties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         kafkaProperties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         this.producer = new KafkaProducer<>(kafkaProperties);
+
+        taskQueue.startExecuting();
     }
 
     @Override
     public void report(Event<?> event) {
-
-        log.info("Received event - eventType: {}, event: {}", event.type(), event);
 
         if (!TOPIC_MAP.containsKey(event.type())) {
             log.warn("Discarding events of type {} as no mapping exists in TOPIC_MAP.", event.type());
@@ -86,56 +72,69 @@ public final class EventKafkaProvider implements IEventCollector {
         switch (event.type()) {
             // 客户端已成功连接到服务器
             case CLIENT_CONNECTED:
-                log.info("CLIENT_CONNECTED start");
-                executor.execute(() -> handleClientConnectedEvent(event));
-                log.info("CLIENT_CONNECTED end");
+                executeEvent(event, this::handleClientConnectedEvent);
                 break;
             // 订阅成功
             case SUB_ACKED:
-                log.info("SUB_ACKED start");
-                executor.execute(() -> handleSubAckedEvent(event));
-                log.info("SUB_ACKED end");
+                executeEvent(event, this::handleSubAckedEvent);
                 break;
             // 取消订阅
             case UNSUB_ACKED:
-                log.info("UNSUB_ACKED start");
-                executor.execute(() -> handleUnsubAckedEvent(event));
-                log.info("UNSUB_ACKED end");
+                executeEvent(event, this::handleUnsubAckedEvent);
                 break;
             // 客户端的遗嘱消息已被分发
             case DISTED:
-                log.info("DISTED start");
-                executor.execute(() -> handleDistedEvent(event));
-                log.info("DISTED end");
+                executeEvent(event, this::handleDistedEvent);
                 break;
             // 消息分发错误
             case DIST_ERROR:
-                log.info("DIST_ERROR start");
-                executor.execute(() -> handleDistErrorEvent(event));
-                log.info("DIST_ERROR end");
+                executeEvent(event, this::handleDistErrorEvent);
                 break;
             // 客户端主动发送了DISCONNECT消息，断开连接
             case BY_CLIENT:
-                log.info("BY_CLIENT start");
-                executor.execute(() -> handleByClientEvent(event));
-                log.info("BY_CLIENT end");
+                executeEvent(event, this::handleByClientEvent);
                 break;
             // 服务器由于某些原因（如客户端违反协议规定）主动断开了与客户端的连接
             case BY_SERVER:
-                log.info("BY_SERVER start");
-                executor.execute(() -> handleByServerEvent(event));
-                log.info("BY_SERVER end");
+                executeEvent(event, this::handleByServerEvent);
                 break;
             // 客户端被服务器踢下线，可能是因为另一个同样标识符的客户端连接到了服务器
             case KICKED:
-                log.info("KICKED start");
-                executor.execute(() -> handleKickedEvent(event));
-                log.info("KICKED end");
+                executeEvent(event, this::handleKickedEvent);
                 break;
             default:
                 log.warn("Discarding events of type {} as no handler exists.", event.type());
                 break;
         }
+    }
+
+    private void executeEvent(Event<?> event, Consumer<Event<?>> handler) {
+        log.info("{} start", event.type());
+        taskQueue.addTask(()->{
+            handler.accept(event);
+        });
+        log.info("{} end", event.type());
+    }
+
+    private void createMessageDetailsJson(Event<?> event, Map<String, Object> details) {
+
+        log.info("coming...{}",event.type());
+
+        Map<String, Object> messageDetails = new HashMap<>();
+        messageDetails.putAll(details);
+
+        if (messageDetails.get("timestamp") == null) {
+            messageDetails.put("timestamp", System.currentTimeMillis());
+        }
+
+        try {
+            String messageDetailsJson = new ObjectMapper().writeValueAsString(messageDetails);
+            sendEventToKafka(TOPIC_MAP.get(event.type()), messageDetailsJson);
+        } catch (JsonProcessingException e) {
+            log.error("Error occurred while serializing message details. Exception: ", e);
+        }
+
+        log.info("out{}",event.type());
     }
 
     /**
@@ -153,8 +152,6 @@ public final class EventKafkaProvider implements IEventCollector {
 
             int keepAliveTimeSeconds = clientConnected.keepAliveTimeSeconds();
 
-            ObjectMapper objectMapper = new ObjectMapper();
-
             Map<String, Object> messageDetails = new HashMap<>();
             messageDetails.put("tenantId", tenantId);
             messageDetails.put("clientId", metadataMap.get("clientId"));
@@ -162,14 +159,8 @@ public final class EventKafkaProvider implements IEventCollector {
             messageDetails.put("event", "CONNECT");
             messageDetails.put("address", metadataMap.get("address"));
             messageDetails.put("keepAliveTimeSeconds", keepAliveTimeSeconds);
-            messageDetails.put("timestamp", System.currentTimeMillis());
 
-            try {
-                String messageDetailsJson = objectMapper.writeValueAsString(messageDetails);
-                sendEventToKafka(TOPIC_MAP.get(event.type()), messageDetailsJson);
-            } catch (JsonProcessingException e) {
-                log.error("Error occurred while serializing message details. Exception: ", e);
-            }
+            createMessageDetailsJson(clientConnected, messageDetails);
         }
     }
 
@@ -184,8 +175,6 @@ public final class EventKafkaProvider implements IEventCollector {
 
         if (metadataMap != null) {
 
-            ObjectMapper objectMapper = new ObjectMapper();
-
             Map<String, Object> messageDetails = new HashMap<>();
             messageDetails.put("tenantId", tenantId);
             messageDetails.put("clientId", metadataMap.get("clientId"));
@@ -194,16 +183,9 @@ public final class EventKafkaProvider implements IEventCollector {
             messageDetails.put("success", "success");
             messageDetails.put("event", "SUBSCRIBE");
             messageDetails.put("address", metadataMap.get("address"));
-            messageDetails.put("timestamp", System.currentTimeMillis());
 
-            try {
-                String messageDetailsJson = objectMapper.writeValueAsString(messageDetails);
-                sendEventToKafka(TOPIC_MAP.get(event.type()), messageDetailsJson);
-            } catch (JsonProcessingException e) {
-                log.error("Error occurred while serializing message details. Exception: ", e);
-            }
+            createMessageDetailsJson(subAcked, messageDetails);
         }
-
     }
 
     /*
@@ -217,8 +199,6 @@ public final class EventKafkaProvider implements IEventCollector {
 
         if (metadataMap != null) {
 
-            ObjectMapper objectMapper = new ObjectMapper();
-
             Map<String, Object> messageDetails = new HashMap<>();
             messageDetails.put("tenantId", tenantId);
             messageDetails.put("clientId", metadataMap.get("clientId"));
@@ -227,14 +207,8 @@ public final class EventKafkaProvider implements IEventCollector {
             messageDetails.put("success", "success");
             messageDetails.put("event", "UNSUBSCRIBE");
             messageDetails.put("address", metadataMap.get("address"));
-            messageDetails.put("timestamp", System.currentTimeMillis());
 
-            try {
-                String messageDetailsJson = objectMapper.writeValueAsString(messageDetails);
-                sendEventToKafka(TOPIC_MAP.get(event.type()), messageDetailsJson);
-            } catch (JsonProcessingException e) {
-                log.error("Error occurred while serializing message details. Exception: ", e);
-            }
+            createMessageDetailsJson(unsubAcked, messageDetails);
         }
     }
 
@@ -242,8 +216,10 @@ public final class EventKafkaProvider implements IEventCollector {
      * 客户端的遗嘱消息已被分发
      * */
     private void handleDistedEvent(Event<?> event) {
+
         Disted disted = (Disted) event.clone();
-        ObjectMapper objectMapper = new ObjectMapper();
+
+        String tenantId = "";
 
         Iterable<PublisherMessagePack> messagePack = disted.messages();
         messagePack.forEach(pack -> {
@@ -260,6 +236,7 @@ public final class EventKafkaProvider implements IEventCollector {
 
                     Map<String, Object> messageDetails = new HashMap<>();
                     messageDetails.put("topic", topic);
+                    messageDetails.put("tenantId", tenantId);
                     messageDetails.put("messageId", messageId);
                     messageDetails.put("qos", pubQoSValue);
                     messageDetails.put("timestamp", timestamp);
@@ -269,12 +246,7 @@ public final class EventKafkaProvider implements IEventCollector {
                     messageDetails.put("payload", payloadStr);
                     messageDetails.put("body", payloadStr);
 
-                    try {
-                        String messageDetailsJson = objectMapper.writeValueAsString(messageDetails);
-                        sendEventToKafka(TOPIC_MAP.get(event.type()), messageDetailsJson);
-                    } catch (JsonProcessingException e) {
-                        log.error("Error occurred while serializing message details. Exception: ", e);
-                    }
+                    createMessageDetailsJson(disted, messageDetails);
                 });
             });
         });
@@ -284,26 +256,19 @@ public final class EventKafkaProvider implements IEventCollector {
      * 消息分发错误
      * */
     private void handleDistErrorEvent(Event<?> event) {
+
         DistError distError = (DistError) event.clone();
-
-        ObjectMapper objectMapper = new ObjectMapper();
-
+        String tenantId = "";
         Map<String, Object> messageDetails = new HashMap<>();
         messageDetails.put("clientId", distError.reqId());
+        messageDetails.put("tenantId", tenantId);
         messageDetails.put("message", distError.messages().toString());
         messageDetails.put("success", "success");
         messageDetails.put("event", "ERROR");
         messageDetails.put("reqId", distError.reqId());
         messageDetails.put("code", distError.code());
-        messageDetails.put("timestamp", System.currentTimeMillis());
 
-        try {
-            String messageDetailsJson = objectMapper.writeValueAsString(messageDetails);
-            sendEventToKafka(TOPIC_MAP.get(event.type()), messageDetailsJson);
-        } catch (JsonProcessingException e) {
-            log.error("Error occurred while serializing message details. Exception: ", e);
-        }
-
+        createMessageDetailsJson(distError, messageDetails);
     }
 
     /*
@@ -317,22 +282,14 @@ public final class EventKafkaProvider implements IEventCollector {
 
         if (metadataMap != null) {
 
-            ObjectMapper objectMapper = new ObjectMapper();
-
             Map<String, Object> messageDetails = new HashMap<>();
             messageDetails.put("tenantId", tenantId);
             messageDetails.put("clientId", metadataMap.get("clientId"));
             messageDetails.put("success", "success");
             messageDetails.put("event", "DISCONNECT");
             messageDetails.put("address", metadataMap.get("address"));
-            messageDetails.put("timestamp", System.currentTimeMillis());
 
-            try {
-                String messageDetailsJson = objectMapper.writeValueAsString(messageDetails);
-                sendEventToKafka(TOPIC_MAP.get(event.type()), messageDetailsJson);
-            } catch (JsonProcessingException e) {
-                log.error("Error occurred while serializing message details. Exception: ", e);
-            }
+            createMessageDetailsJson(byClient, messageDetails);
         }
     }
 
@@ -347,22 +304,14 @@ public final class EventKafkaProvider implements IEventCollector {
 
         if (metadataMap != null) {
 
-            ObjectMapper objectMapper = new ObjectMapper();
-
             Map<String, Object> messageDetails = new HashMap<>();
             messageDetails.put("tenantId", tenantId);
             messageDetails.put("clientId", metadataMap.get("clientId"));
             messageDetails.put("success", "success");
             messageDetails.put("event", "CLOSE");
             messageDetails.put("address", metadataMap.get("address"));
-            messageDetails.put("timestamp", System.currentTimeMillis());
 
-            try {
-                String messageDetailsJson = objectMapper.writeValueAsString(messageDetails);
-                sendEventToKafka(TOPIC_MAP.get(event.type()), messageDetailsJson);
-            } catch (JsonProcessingException e) {
-                log.error("Error occurred while serializing message details. Exception: ", e);
-            }
+            createMessageDetailsJson(byServer, messageDetails);
         }
     }
 
@@ -378,22 +327,14 @@ public final class EventKafkaProvider implements IEventCollector {
 
         if (metadataMap != null) {
 
-            ObjectMapper objectMapper = new ObjectMapper();
-
             Map<String, Object> messageDetails = new HashMap<>();
             messageDetails.put("tenantId", tenantId);
             messageDetails.put("clientId", metadataMap.get("clientId"));
             messageDetails.put("success", "success");
             messageDetails.put("event", "CLOSE");
             messageDetails.put("address", metadataMap.get("address"));
-            messageDetails.put("timestamp", System.currentTimeMillis());
 
-            try {
-                String messageDetailsJson = objectMapper.writeValueAsString(messageDetails);
-                sendEventToKafka(TOPIC_MAP.get(event.type()), messageDetailsJson);
-            } catch (JsonProcessingException e) {
-                log.error("Error occurred while serializing message details. Exception: ", e);
-            }
+            createMessageDetailsJson(kicked, messageDetails);
         }
     }
 
@@ -403,14 +344,10 @@ public final class EventKafkaProvider implements IEventCollector {
      * */
     private void sendEventToKafka(String topic, String message) {
 
-        log.info("topic:{},message:{}", topic, message);
-
         if (CharSequenceUtil.isBlank(topic) || CharSequenceUtil.isBlank(message)) {
             log.warn("Cannot send null event to Kafka.");
             return;
         }
-
-        log.info("topic:{},start", topic);
 
         producer.send(new ProducerRecord<>(topic, message), (recordMetadata, e) -> {
             if (e != null) {
