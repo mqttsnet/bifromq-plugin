@@ -5,17 +5,13 @@ import java.util.concurrent.*;
 import java.util.function.Consumer;
 
 import bifromq.plugin.config.ConfigUtil;
-import cn.hutool.core.lang.Console;
+import bifromq.plugin.utils.TaskQueue;
 import cn.hutool.core.text.CharSequenceUtil;
-import cn.hutool.cron.CronUtil;
-import cn.hutool.cron.task.Task;
-import com.alibaba.fastjson2.JSON;
 import com.baidu.bifromq.plugin.eventcollector.Event;
 import com.baidu.bifromq.plugin.eventcollector.EventType;
 import com.baidu.bifromq.plugin.eventcollector.IEventCollector;
 import com.baidu.bifromq.plugin.eventcollector.distservice.DistError;
 import com.baidu.bifromq.plugin.eventcollector.distservice.Disted;
-import com.baidu.bifromq.plugin.eventcollector.mqttbroker.PingReq;
 import com.baidu.bifromq.plugin.eventcollector.mqttbroker.clientconnected.ClientConnected;
 import com.baidu.bifromq.plugin.eventcollector.mqttbroker.clientdisconnect.ByClient;
 import com.baidu.bifromq.plugin.eventcollector.mqttbroker.clientdisconnect.ByServer;
@@ -33,16 +29,12 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.pf4j.Extension;
 
-import java.nio.ByteBuffer;
-import java.util.*;
-import java.util.concurrent.*;
-
 @Extension
 @Slf4j
 public final class EventKafkaProvider implements IEventCollector {
 
     private final KafkaProducer<String, String> producer;
-    private final ThreadPoolExecutor executor;
+    TaskQueue taskQueue = new TaskQueue();
 
     private static final Map<EventType, String> TOPIC_MAP = new EnumMap<>(EventType.class);
 
@@ -57,22 +49,7 @@ public final class EventKafkaProvider implements IEventCollector {
         TOPIC_MAP.put(EventType.KICKED, "device.kicked.topic");
     }
 
-
-    Queue<Map<String, String>> queue = new LinkedList<>();
-
     public EventKafkaProvider() {
-
-        // Create a thread pool based on the actual requirements
-        int corePoolSize = Runtime.getRuntime().availableProcessors() * 10;
-        int maximumPoolSize = corePoolSize * 20;
-        long keepAliveTime = 60L;
-        TimeUnit unit = TimeUnit.SECONDS;
-        BlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>();
-        ThreadFactory threadFactory = Executors.defaultThreadFactory();
-        RejectedExecutionHandler handler = new ThreadPoolExecutor.AbortPolicy();
-
-        this.executor = new ThreadPoolExecutor(corePoolSize, maximumPoolSize, keepAliveTime,
-                unit, workQueue, threadFactory, handler);
 
         Properties kafkaProperties = new Properties();
         kafkaProperties.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
@@ -81,30 +58,11 @@ public final class EventKafkaProvider implements IEventCollector {
         kafkaProperties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         this.producer = new KafkaProducer<>(kafkaProperties);
 
-        //动态的添加定时任务每5秒执行一次
-        CronUtil.schedule("*/1 * * * * *", new Task() {
-            @Override
-            public void execute() {
-                Map<String, String> map = queue.poll();
-                if (map != null) {
-                    log.info("topic:{}", map.get("topic"));
-                    log.info("message:{}", map.get("message"));
-                    sendEventToKafka(map.get("topic"), map.get("message"));
-                }
-            }
-        });
-        //支持秒级
-        CronUtil.setMatchSecond(true);
-        //开启定时任务
-        CronUtil.start(true);
-
-        log.info("开启定时线程了");
+        taskQueue.startExecuting();
     }
 
     @Override
     public void report(Event<?> event) {
-
-        log.info("Received event - eventType: {}, event: {}", event.type(), event);
 
         if (!TOPIC_MAP.containsKey(event.type())) {
             log.warn("Discarding events of type {} as no mapping exists in TOPIC_MAP.", event.type());
@@ -152,11 +110,16 @@ public final class EventKafkaProvider implements IEventCollector {
 
     private void executeEvent(Event<?> event, Consumer<Event<?>> handler) {
         log.info("{} start", event.type());
-        executor.execute(() -> handler.accept(event));
+        taskQueue.addTask(()->{
+            handler.accept(event);
+        });
         log.info("{} end", event.type());
     }
 
     private void createMessageDetailsJson(Event<?> event, Map<String, Object> details) {
+
+        log.info("coming...{}",event.type());
+
         Map<String, Object> messageDetails = new HashMap<>();
         messageDetails.putAll(details);
 
@@ -164,23 +127,14 @@ public final class EventKafkaProvider implements IEventCollector {
             messageDetails.put("timestamp", System.currentTimeMillis());
         }
 
-        ObjectMapper objectMapper = new ObjectMapper();
-
         try {
-            //String messageDetailsJson = objectMapper.writeValueAsString(messageDetails);
-            //sendEventToKafka(TOPIC_MAP.get(event.type()), messageDetailsJson);
-
-            Map<String, String> map = new HashMap<>();
-            map.put("topic", TOPIC_MAP.get(event.type()));
-            map.put("message", objectMapper.writeValueAsString(messageDetails));
-
-            queue.offer(map);
-
-            log.info("topic:[topic:{},message:{}]", map.get("topic"), map.get("message"));
-
+            String messageDetailsJson = new ObjectMapper().writeValueAsString(messageDetails);
+            sendEventToKafka(TOPIC_MAP.get(event.type()), messageDetailsJson);
         } catch (JsonProcessingException e) {
             log.error("Error occurred while serializing message details. Exception: ", e);
         }
+
+        log.info("out{}",event.type());
     }
 
     /**
@@ -390,14 +344,10 @@ public final class EventKafkaProvider implements IEventCollector {
      * */
     private void sendEventToKafka(String topic, String message) {
 
-        log.info("topic:{},message:{}", topic, message);
-
         if (CharSequenceUtil.isBlank(topic) || CharSequenceUtil.isBlank(message)) {
             log.warn("Cannot send null event to Kafka.");
             return;
         }
-
-        log.info("topic:{},start", topic);
 
         producer.send(new ProducerRecord<>(topic, message), (recordMetadata, e) -> {
             if (e != null) {
