@@ -187,7 +187,7 @@ public final class EventKafkaProvider implements IEventCollector {
             messageDetails.put("messageId", subAcked.messageId());
             messageDetails.put("topic", subAcked.topicFilter().get(0));
             messageDetails.put("success", "success");
-            messageDetails.put("event", "sbuscribe");
+            messageDetails.put("event", "SUBSCRIBE");
             messageDetails.put("address", metadataMap.get("address"));
 
             createMessageDetailsJson(subAcked, messageDetails);
@@ -211,7 +211,7 @@ public final class EventKafkaProvider implements IEventCollector {
             messageDetails.put("messageId", unsubAcked.messageId());
             messageDetails.put("topic", unsubAcked.topicFilter().get(0));
             messageDetails.put("success", "success");
-            messageDetails.put("event", "unsubscribe");
+            messageDetails.put("event", "UNSUBSCRIBE");
             messageDetails.put("address", metadataMap.get("address"));
 
             createMessageDetailsJson(unsubAcked, messageDetails);
@@ -246,7 +246,7 @@ public final class EventKafkaProvider implements IEventCollector {
                     messageDetails.put("messageId", messageId);
                     messageDetails.put("qos", pubQoSValue);
                     messageDetails.put("timestamp", timestamp);
-                    messageDetails.put("event", "publish");
+                    messageDetails.put("event", "PUBLISH");
                     messageDetails.put("time", timestamp);
                     messageDetails.put("expireTimestamp", expireTimestamp);
                     messageDetails.put("payload", payloadStr);
@@ -292,7 +292,7 @@ public final class EventKafkaProvider implements IEventCollector {
             messageDetails.put("tenantId", tenantId);
             messageDetails.put("clientId", metadataMap.get("clientId"));
             messageDetails.put("success", "success");
-            messageDetails.put("event", "disconnect");
+            messageDetails.put("event", "DISCONNECT");
             messageDetails.put("address", metadataMap.get("address"));
 
             createMessageDetailsJson(byClient, messageDetails);
@@ -300,7 +300,7 @@ public final class EventKafkaProvider implements IEventCollector {
     }
 
     /*
-     * 客户端被服务器踢下线，可能是因为另一个同样标识符的客户端连接到了服务器。
+     * 服务器由于某些原因（如客户端违反协议规定）主动断开了与客户端的连接。
      * */
     private void handleByServerEvent(Event<?> event) {
         ByServer byServer = (ByServer) event.clone();
@@ -314,7 +314,7 @@ public final class EventKafkaProvider implements IEventCollector {
             messageDetails.put("tenantId", tenantId);
             messageDetails.put("clientId", metadataMap.get("clientId"));
             messageDetails.put("success", "success");
-            messageDetails.put("event", "close");
+            messageDetails.put("event", "CLOSE");
             messageDetails.put("address", metadataMap.get("address"));
 
             createMessageDetailsJson(byServer, messageDetails);
@@ -337,7 +337,7 @@ public final class EventKafkaProvider implements IEventCollector {
             messageDetails.put("tenantId", tenantId);
             messageDetails.put("clientId", metadataMap.get("clientId"));
             messageDetails.put("success", "success");
-            messageDetails.put("event", "close");
+            messageDetails.put("event", "CLOSE");
             messageDetails.put("address", metadataMap.get("address"));
 
             createMessageDetailsJson(kicked, messageDetails);
