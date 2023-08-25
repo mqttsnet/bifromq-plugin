@@ -28,13 +28,15 @@ import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.pf4j.Extension;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Extension
 @Slf4j
 public final class EventKafkaProvider implements IEventCollector {
 
     private final KafkaProducer<String, String> producer;
-    TaskQueue taskQueue = new TaskQueue();
+
+    private TaskQueue taskQueue = new TaskQueue();
 
     private static final Map<EventType, String> TOPIC_MAP = new EnumMap<>(EventType.class);
 
@@ -62,63 +64,66 @@ public final class EventKafkaProvider implements IEventCollector {
     }
 
     @Override
-    public void report(Event<?> event) {
+    public void report(Event<?> eventObj) {
 
-        if (!TOPIC_MAP.containsKey(event.type())) {
-            log.warn("Discarding events of type {} as no mapping exists in TOPIC_MAP.", event.type());
-            return;
-        }
+        Event<?> event = (Event<?>) eventObj.clone();
 
-        switch (event.type()) {
-            // 客户端已成功连接到服务器
-            case CLIENT_CONNECTED:
-                executeEvent(event, this::handleClientConnectedEvent);
-                break;
-            // 订阅成功
-            case SUB_ACKED:
-                executeEvent(event, this::handleSubAckedEvent);
-                break;
-            // 取消订阅
-            case UNSUB_ACKED:
-                executeEvent(event, this::handleUnsubAckedEvent);
-                break;
-            // 客户端的遗嘱消息已被分发
-            case DISTED:
-                executeEvent(event, this::handleDistedEvent);
-                break;
-            // 消息分发错误
-            case DIST_ERROR:
-                executeEvent(event, this::handleDistErrorEvent);
-                break;
-            // 客户端主动发送了DISCONNECT消息，断开连接
-            case BY_CLIENT:
-                executeEvent(event, this::handleByClientEvent);
-                break;
-            // 服务器由于某些原因（如客户端违反协议规定）主动断开了与客户端的连接
-            case BY_SERVER:
-                executeEvent(event, this::handleByServerEvent);
-                break;
-            // 客户端被服务器踢下线，可能是因为另一个同样标识符的客户端连接到了服务器
-            case KICKED:
-                executeEvent(event, this::handleKickedEvent);
-                break;
-            default:
-                log.warn("Discarding events of type {} as no handler exists.", event.type());
-                break;
-        }
+        taskQueue.addTask(() -> {
+
+            if (!TOPIC_MAP.containsKey(event.type())) {
+                log.warn("Discarding events of type {} as no mapping exists in TOPIC_MAP.", event.type());
+                return;
+            }
+
+            switch (event.type()) {
+                // 客户端已成功连接到服务器
+                case CLIENT_CONNECTED:
+                    executeEvent(event, this::handleClientConnectedEvent);
+                    break;
+                // 订阅成功
+                case SUB_ACKED:
+                    executeEvent(event, this::handleSubAckedEvent);
+                    break;
+                // 取消订阅
+                case UNSUB_ACKED:
+                    executeEvent(event, this::handleUnsubAckedEvent);
+                    break;
+                // 客户端的遗嘱消息已被分发
+                case DISTED:
+                    executeEvent(event, this::handleDistedEvent);
+                    break;
+                // 消息分发错误
+                case DIST_ERROR:
+                    executeEvent(event, this::handleDistErrorEvent);
+                    break;
+                // 客户端主动发送了DISCONNECT消息，断开连接
+                case BY_CLIENT:
+                    executeEvent(event, this::handleByClientEvent);
+                    break;
+                // 服务器由于某些原因（如客户端违反协议规定）主动断开了与客户端的连接
+                case BY_SERVER:
+                    executeEvent(event, this::handleByServerEvent);
+                    break;
+                // 客户端被服务器踢下线，可能是因为另一个同样标识符的客户端连接到了服务器
+                case KICKED:
+                    executeEvent(event, this::handleKickedEvent);
+                    break;
+                default:
+                    log.warn("Discarding events of type {} as no handler exists.", event.type());
+                    break;
+            }
+        });
     }
 
     private void executeEvent(Event<?> event, Consumer<Event<?>> handler) {
-        log.info("{} start", event.type());
-        taskQueue.addTask(()->{
-            handler.accept(event);
-        });
-        log.info("{} end", event.type());
+        log.info("executeEvent:{} start", event.type());
+        handler.accept(event);
+        log.info("executeEvent:{} end", event.type());
     }
 
     private void createMessageDetailsJson(Event<?> event, Map<String, Object> details) {
 
-        log.info("coming...{}",event.type());
+        log.info("coming...................{}", event.type());
 
         Map<String, Object> messageDetails = new HashMap<>();
         messageDetails.putAll(details);
@@ -130,11 +135,12 @@ public final class EventKafkaProvider implements IEventCollector {
         try {
             String messageDetailsJson = new ObjectMapper().writeValueAsString(messageDetails);
             sendEventToKafka(TOPIC_MAP.get(event.type()), messageDetailsJson);
+            log.info("{}:{}", TOPIC_MAP.get(event.type()), messageDetailsJson);
         } catch (JsonProcessingException e) {
             log.error("Error occurred while serializing message details. Exception: ", e);
         }
 
-        log.info("out{}",event.type());
+        log.info("out........................{}", event.type());
     }
 
     /**
@@ -156,7 +162,7 @@ public final class EventKafkaProvider implements IEventCollector {
             messageDetails.put("tenantId", tenantId);
             messageDetails.put("clientId", metadataMap.get("clientId"));
             messageDetails.put("success", "success");
-            messageDetails.put("event", "CONNECT");
+            messageDetails.put("event", "connect");
             messageDetails.put("address", metadataMap.get("address"));
             messageDetails.put("keepAliveTimeSeconds", keepAliveTimeSeconds);
 
@@ -181,7 +187,7 @@ public final class EventKafkaProvider implements IEventCollector {
             messageDetails.put("messageId", subAcked.messageId());
             messageDetails.put("topic", subAcked.topicFilter().get(0));
             messageDetails.put("success", "success");
-            messageDetails.put("event", "SUBSCRIBE");
+            messageDetails.put("event", "sbuscribe");
             messageDetails.put("address", metadataMap.get("address"));
 
             createMessageDetailsJson(subAcked, messageDetails);
@@ -205,7 +211,7 @@ public final class EventKafkaProvider implements IEventCollector {
             messageDetails.put("messageId", unsubAcked.messageId());
             messageDetails.put("topic", unsubAcked.topicFilter().get(0));
             messageDetails.put("success", "success");
-            messageDetails.put("event", "UNSUBSCRIBE");
+            messageDetails.put("event", "unsubscribe");
             messageDetails.put("address", metadataMap.get("address"));
 
             createMessageDetailsJson(unsubAcked, messageDetails);
@@ -240,7 +246,7 @@ public final class EventKafkaProvider implements IEventCollector {
                     messageDetails.put("messageId", messageId);
                     messageDetails.put("qos", pubQoSValue);
                     messageDetails.put("timestamp", timestamp);
-                    messageDetails.put("event", "PUBLISH");
+                    messageDetails.put("event", "publish");
                     messageDetails.put("time", timestamp);
                     messageDetails.put("expireTimestamp", expireTimestamp);
                     messageDetails.put("payload", payloadStr);
@@ -264,7 +270,7 @@ public final class EventKafkaProvider implements IEventCollector {
         messageDetails.put("tenantId", tenantId);
         messageDetails.put("message", distError.messages().toString());
         messageDetails.put("success", "success");
-        messageDetails.put("event", "ERROR");
+        messageDetails.put("event", "error");
         messageDetails.put("reqId", distError.reqId());
         messageDetails.put("code", distError.code());
 
@@ -286,7 +292,7 @@ public final class EventKafkaProvider implements IEventCollector {
             messageDetails.put("tenantId", tenantId);
             messageDetails.put("clientId", metadataMap.get("clientId"));
             messageDetails.put("success", "success");
-            messageDetails.put("event", "DISCONNECT");
+            messageDetails.put("event", "disconnect");
             messageDetails.put("address", metadataMap.get("address"));
 
             createMessageDetailsJson(byClient, messageDetails);
@@ -308,7 +314,7 @@ public final class EventKafkaProvider implements IEventCollector {
             messageDetails.put("tenantId", tenantId);
             messageDetails.put("clientId", metadataMap.get("clientId"));
             messageDetails.put("success", "success");
-            messageDetails.put("event", "CLOSE");
+            messageDetails.put("event", "close");
             messageDetails.put("address", metadataMap.get("address"));
 
             createMessageDetailsJson(byServer, messageDetails);
@@ -331,7 +337,7 @@ public final class EventKafkaProvider implements IEventCollector {
             messageDetails.put("tenantId", tenantId);
             messageDetails.put("clientId", metadataMap.get("clientId"));
             messageDetails.put("success", "success");
-            messageDetails.put("event", "CLOSE");
+            messageDetails.put("event", "close");
             messageDetails.put("address", metadataMap.get("address"));
 
             createMessageDetailsJson(kicked, messageDetails);
