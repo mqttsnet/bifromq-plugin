@@ -1,6 +1,8 @@
 package bifromq.plugin.provider;
 
-import bifromq.plugin.config.AuthProviderConfig;
+import java.util.Optional;
+import java.util.concurrent.*;
+
 import bifromq.plugin.config.ConfigUtil;
 import cn.hutool.http.HttpResponse;
 import cn.hutool.http.HttpUtil;
@@ -13,9 +15,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.pf4j.Extension;
 import org.springframework.http.HttpStatus;
-
-import java.util.Optional;
-import java.util.concurrent.*;
 
 @Extension
 @Slf4j

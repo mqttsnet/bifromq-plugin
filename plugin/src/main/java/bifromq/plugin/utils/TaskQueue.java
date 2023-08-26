@@ -1,53 +1,82 @@
 package bifromq.plugin.utils;
 
-import lombok.extern.slf4j.Slf4j;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import java.util.LinkedList;
-import java.util.Queue;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class TaskQueue {
 
-    private Queue<Runnable> tasks = new LinkedList<>();
-    private final Object lock = new Object();
+    private LinkedBlockingQueue<Runnable> tasks = new LinkedBlockingQueue<>();
+    private ThreadPoolExecutor executorService;
 
-    // 添加任务到队列
-    public void addTask(Runnable task) {
-        synchronized (lock) {
-            tasks.add(task);
-            lock.notify();
-        }
-    }
+    /**
+     * Constructor to initialize the TaskQueue with the given parameters.
+     *
+     * @param corePoolSize    The number of threads to keep in the pool, even if they are idle.
+     * @param maximumPoolSize The maximum number of threads to allow in the pool.
+     * @param keepAliveTime   When the number of threads is greater than the core, this is the maximum time that excess idle threads will wait for new tasks before terminating.
+     * @param unit            The time unit for the keepAliveTime argument.
+     */
+    public TaskQueue(int corePoolSize, int maximumPoolSize, long keepAliveTime, TimeUnit unit) {
+        log.info("Initializing TaskQueue...");
+        this.executorService = new ThreadPoolExecutor(
+                corePoolSize,
+                maximumPoolSize,
+                keepAliveTime,
+                unit,
+                new LinkedBlockingQueue<>(),
+                new ThreadFactory() {
+                    private final AtomicInteger counter = new AtomicInteger(0);
 
-    // 在一个线程中循环执行队列中的任务
-    public void startExecuting() {
-        new Thread(() -> {
-            while (true) {
-                log.info("executeTask start");
-                executeTask();
-                log.info("executeTask end");
-            }
-        }).start();
-    }
+                    @Override
+                    public Thread newThread(Runnable r) {
+                        return new Thread(r, "TaskQueueThread-" + counter.incrementAndGet());
+                    }
+                });
 
-    // 从队列中取出一个任务并执行
-    private void executeTask() {
-        Runnable task = null;
-
-        synchronized (lock) {
-            while (tasks.isEmpty()) {
+        for (int i = 0; i < corePoolSize; i++) {
+            executorService.submit(() -> {
                 try {
-                    lock.wait();
+                    while (true) {
+                        log.info("Waiting for task, executing on thread: " + Thread.currentThread().getName());
+                        Runnable task = tasks.take(); // This will block if the queue is empty
+                        log.info("Beginning task execution on thread: " + Thread.currentThread().getName());
+                        task.run();
+                        log.info("Task execution completed on thread: " + Thread.currentThread().getName());
+                    }
                 } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();  // Restore the interrupted status
-                    return;
+                    Thread.currentThread().interrupt();
+                    log.warn("Task execution was interrupted on thread: " + Thread.currentThread().getName());
                 }
-            }
-            task = tasks.poll();
+            });
         }
+    }
 
-        if (task != null) {
-            task.run();
+    /**
+     * Add a new task to the task queue.
+     *
+     * @param task The task to be added to the queue.
+     */
+    public void addTask(Runnable task) {
+        try {
+            log.info("Adding new task...");
+            tasks.put(task);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Failed to add task, executed on thread: " + Thread.currentThread().getName(), e);
         }
+    }
+
+    /**
+     * Safely shuts down the task queue.
+     */
+    public void shutdown() {
+        log.info("Shutting down TaskQueue...");
+        executorService.shutdownNow(); // This will interrupt any blocking tasks
     }
 }
