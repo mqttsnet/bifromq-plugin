@@ -1,7 +1,7 @@
 package bifromq.plugin.provider;
 
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import bifromq.plugin.config.ConfigUtil;
@@ -18,7 +18,6 @@ import com.baidu.bifromq.plugin.eventcollector.mqttbroker.clientdisconnect.BySer
 import com.baidu.bifromq.plugin.eventcollector.mqttbroker.clientdisconnect.Kicked;
 import com.baidu.bifromq.plugin.eventcollector.mqttbroker.subhandling.SubAcked;
 import com.baidu.bifromq.plugin.eventcollector.mqttbroker.subhandling.UnsubAcked;
-import com.baidu.bifromq.type.PublisherMessagePack;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.protobuf.ByteString;
@@ -28,7 +27,6 @@ import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.pf4j.Extension;
-import org.springframework.beans.factory.annotation.Autowired;
 
 @Extension
 @Slf4j
@@ -36,9 +34,12 @@ public final class EventKafkaProvider implements IEventCollector {
 
     private final KafkaProducer<String, String> producer;
 
-    private TaskQueue taskQueue = new TaskQueue();
+    private final TaskQueue taskQueue = new TaskQueue(4, 10, 60L, TimeUnit.SECONDS);
+
 
     private static final Map<EventType, String> TOPIC_MAP = new EnumMap<>(EventType.class);
+
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     static {
         TOPIC_MAP.put(EventType.CLIENT_CONNECTED, "client.connected.topic");
@@ -59,8 +60,6 @@ public final class EventKafkaProvider implements IEventCollector {
         kafkaProperties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         kafkaProperties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         this.producer = new KafkaProducer<>(kafkaProperties);
-
-        taskQueue.startExecuting();
     }
 
     @Override
@@ -77,40 +76,29 @@ public final class EventKafkaProvider implements IEventCollector {
 
             switch (event.type()) {
                 // 客户端已成功连接到服务器
-                case CLIENT_CONNECTED:
-                    executeEvent(event, this::handleClientConnectedEvent);
-                    break;
+                case CLIENT_CONNECTED -> executeEvent(event, this::handleClientConnectedEvent);
+
                 // 订阅成功
-                case SUB_ACKED:
-                    executeEvent(event, this::handleSubAckedEvent);
-                    break;
+                case SUB_ACKED -> executeEvent(event, this::handleSubAckedEvent);
+
                 // 取消订阅
-                case UNSUB_ACKED:
-                    executeEvent(event, this::handleUnsubAckedEvent);
-                    break;
+                case UNSUB_ACKED -> executeEvent(event, this::handleUnsubAckedEvent);
+
                 // 客户端的遗嘱消息已被分发
-                case DISTED:
-                    executeEvent(event, this::handleDistedEvent);
-                    break;
+                case DISTED -> executeEvent(event, this::handleDistedEvent);
+
                 // 消息分发错误
-                case DIST_ERROR:
-                    executeEvent(event, this::handleDistErrorEvent);
-                    break;
+                case DIST_ERROR -> executeEvent(event, this::handleDistErrorEvent);
+
                 // 客户端主动发送了DISCONNECT消息，断开连接
-                case BY_CLIENT:
-                    executeEvent(event, this::handleByClientEvent);
-                    break;
+                case BY_CLIENT -> executeEvent(event, this::handleByClientEvent);
+
                 // 服务器由于某些原因（如客户端违反协议规定）主动断开了与客户端的连接
-                case BY_SERVER:
-                    executeEvent(event, this::handleByServerEvent);
-                    break;
+                case BY_SERVER -> executeEvent(event, this::handleByServerEvent);
+
                 // 客户端被服务器踢下线，可能是因为另一个同样标识符的客户端连接到了服务器
-                case KICKED:
-                    executeEvent(event, this::handleKickedEvent);
-                    break;
-                default:
-                    log.warn("Discarding events of type {} as no handler exists.", event.type());
-                    break;
+                case KICKED -> executeEvent(event, this::handleKickedEvent);
+                default -> log.warn("Discarding events of type {} as no handler exists.", event.type());
             }
         });
     }
@@ -122,232 +110,256 @@ public final class EventKafkaProvider implements IEventCollector {
     }
 
     private void createMessageDetailsJson(Event<?> event, Map<String, Object> details) {
+        log.info("Processing event type: {}", event.type());
 
-        log.info("coming...................{}", event.type());
-
-        Map<String, Object> messageDetails = new HashMap<>();
-        messageDetails.putAll(details);
-
-        if (messageDetails.get("timestamp") == null) {
-            messageDetails.put("timestamp", System.currentTimeMillis());
-        }
+        // 使用computeIfAbsent来确保timestamp存在，而不是先检查再放入
+        details.computeIfAbsent("timestamp", key -> System.currentTimeMillis());
 
         try {
-            String messageDetailsJson = new ObjectMapper().writeValueAsString(messageDetails);
+            String messageDetailsJson = objectMapper.writeValueAsString(details);
             sendEventToKafka(TOPIC_MAP.get(event.type()), messageDetailsJson);
-            log.info("{}:{}", TOPIC_MAP.get(event.type()), messageDetailsJson);
+            log.info("Sent to Kafka topic {}: {}", TOPIC_MAP.get(event.type()), messageDetailsJson);
         } catch (JsonProcessingException e) {
-            log.error("Error occurred while serializing message details. Exception: ", e);
+            log.error("Error serializing message details for event type {}", event.type(), e);
         }
 
-        log.info("out........................{}", event.type());
+        log.info("Processed event type: {}", event.type());
     }
+
 
     /**
      * 处理设备连接事件
-     *
-     * @param event
      */
     private void handleClientConnectedEvent(Event<?> event) {
+        Optional.ofNullable(event)
+                .map(e -> (ClientConnected) e.clone())
+                .ifPresent(clientConnected -> {
+                    Optional<String> tenantIdOpt = Optional.of(clientConnected.clientInfo().getTenantId());
+                    Optional<Map<String, String>> metadataMapOpt = Optional.of(clientConnected.clientInfo().getMetadataMap());
 
-        ClientConnected clientConnected = (ClientConnected) event.clone();
-        String tenantId = clientConnected.clientInfo().getTenantId();
-        Map<String, String> metadataMap = clientConnected.clientInfo().getMetadataMap();
+                    metadataMapOpt.ifPresent(metadataMap -> {
+                        int keepAliveTimeSeconds = clientConnected.keepAliveTimeSeconds();
 
-        if (metadataMap != null) {
+                        Map<String, Object> messageDetails = new HashMap<>();
+                        tenantIdOpt.ifPresent(tenantId -> messageDetails.put("tenantId", tenantId));
+                        messageDetails.put("clientId", metadataMap.getOrDefault("clientId", ""));
+                        messageDetails.put("success", "success");
+                        messageDetails.put("event", "connect");
+                        messageDetails.put("address", metadataMap.getOrDefault("address", ""));
+                        messageDetails.put("keepAliveTimeSeconds", keepAliveTimeSeconds);
 
-            int keepAliveTimeSeconds = clientConnected.keepAliveTimeSeconds();
-
-            Map<String, Object> messageDetails = new HashMap<>();
-            messageDetails.put("tenantId", tenantId);
-            messageDetails.put("clientId", metadataMap.get("clientId"));
-            messageDetails.put("success", "success");
-            messageDetails.put("event", "connect");
-            messageDetails.put("address", metadataMap.get("address"));
-            messageDetails.put("keepAliveTimeSeconds", keepAliveTimeSeconds);
-
-            createMessageDetailsJson(clientConnected, messageDetails);
-        }
+                        createMessageDetailsJson(clientConnected, messageDetails);
+                    });
+                });
     }
 
-    /*
+
+    /**
      * 订阅成功
-     * */
+     */
     private void handleSubAckedEvent(Event<?> event) {
-        SubAcked subAcked = (SubAcked) event.clone();
+        Optional.ofNullable(event)
+                .map(e -> (SubAcked) e.clone())
+                .ifPresent(subAcked -> {
+                    Optional<String> tenantIdOpt = Optional.of(subAcked.clientInfo().getTenantId());
+                    Optional<Map<String, String>> metadataMapOpt = Optional.of(subAcked.clientInfo().getMetadataMap());
 
-        String tenantId = subAcked.clientInfo().getTenantId();
-        Map<String, String> metadataMap = subAcked.clientInfo().getMetadataMap();
+                    metadataMapOpt.ifPresent(metadataMap -> {
+                        Map<String, Object> messageDetails = new HashMap<>();
+                        tenantIdOpt.ifPresent(tenantId -> messageDetails.put("tenantId", tenantId));
+                        messageDetails.put("clientId", metadataMap.getOrDefault("clientId", ""));
+                        messageDetails.put("messageId", subAcked.messageId());
+                        Optional.ofNullable(subAcked.topicFilter())
+                                .filter(topics -> !topics.isEmpty())
+                                .map(topics -> topics.get(0))
+                                .ifPresent(topic -> messageDetails.put("topic", topic));
+                        messageDetails.put("success", "success");
+                        messageDetails.put("event", "SUBSCRIBE");
+                        messageDetails.put("address", metadataMap.getOrDefault("address", ""));
 
-        if (metadataMap != null) {
-
-            Map<String, Object> messageDetails = new HashMap<>();
-            messageDetails.put("tenantId", tenantId);
-            messageDetails.put("clientId", metadataMap.get("clientId"));
-            messageDetails.put("messageId", subAcked.messageId());
-            messageDetails.put("topic", subAcked.topicFilter().get(0));
-            messageDetails.put("success", "success");
-            messageDetails.put("event", "SUBSCRIBE");
-            messageDetails.put("address", metadataMap.get("address"));
-
-            createMessageDetailsJson(subAcked, messageDetails);
-        }
+                        createMessageDetailsJson(subAcked, messageDetails);
+                    });
+                });
     }
 
-    /*
+
+    /**
      * 取消订阅
-     * */
+     */
     private void handleUnsubAckedEvent(Event<?> event) {
-        UnsubAcked unsubAcked = (UnsubAcked) event.clone();
+        Optional.ofNullable(event)
+                .map(e -> (UnsubAcked) e.clone())
+                .ifPresent(unsubAcked -> {
+                    Optional<String> tenantIdOpt = Optional.of(unsubAcked.clientInfo().getTenantId());
+                    Optional<Map<String, String>> metadataMapOpt = Optional.of(unsubAcked.clientInfo().getMetadataMap());
 
-        String tenantId = unsubAcked.clientInfo().getTenantId();
-        Map<String, String> metadataMap = unsubAcked.clientInfo().getMetadataMap();
+                    metadataMapOpt.ifPresent(metadataMap -> {
+                        Map<String, Object> messageDetails = new HashMap<>();
+                        tenantIdOpt.ifPresent(tenantId -> messageDetails.put("tenantId", tenantId));
+                        messageDetails.put("clientId", metadataMap.getOrDefault("clientId", ""));
+                        messageDetails.put("messageId", unsubAcked.messageId());
+                        Optional.ofNullable(unsubAcked.topicFilter())
+                                .filter(topics -> !topics.isEmpty())
+                                .map(topics -> topics.get(0))
+                                .ifPresent(topic -> messageDetails.put("topic", topic));
+                        messageDetails.put("success", "success");
+                        messageDetails.put("event", "UNSUBSCRIBE");
+                        messageDetails.put("address", metadataMap.getOrDefault("address", ""));
 
-        if (metadataMap != null) {
-
-            Map<String, Object> messageDetails = new HashMap<>();
-            messageDetails.put("tenantId", tenantId);
-            messageDetails.put("clientId", metadataMap.get("clientId"));
-            messageDetails.put("messageId", unsubAcked.messageId());
-            messageDetails.put("topic", unsubAcked.topicFilter().get(0));
-            messageDetails.put("success", "success");
-            messageDetails.put("event", "UNSUBSCRIBE");
-            messageDetails.put("address", metadataMap.get("address"));
-
-            createMessageDetailsJson(unsubAcked, messageDetails);
-        }
+                        createMessageDetailsJson(unsubAcked, messageDetails);
+                    });
+                });
     }
 
-    /*
+
+    /**
      * 客户端的遗嘱消息已被分发
-     * */
+     */
     private void handleDistedEvent(Event<?> event) {
+        Optional.ofNullable(event)
+                .map(e -> (Disted) e.clone())
+                .ifPresent(disted -> {
+                    String tenantId = "";  // This doesn't seem to change or get assigned a value based on the given code
 
-        Disted disted = (Disted) event.clone();
+                    Optional.ofNullable(disted.messages())
+                            .ifPresent(messagePack -> {
+                                messagePack.forEach(pack -> {
+                                    Optional.of(pack.getMessagePackList())
+                                            .ifPresent(messagePackList -> {
+                                                messagePackList.parallelStream().forEach(msg -> {
+                                                    String topic = msg.getTopic();
+                                                    Optional.of(msg.getMessageList())
+                                                            .ifPresent(messageList -> {
+                                                                messageList.parallelStream().forEach(message -> {
+                                                                    long messageId = message.getMessageId();
+                                                                    int pubQoSValue = message.getPubQoSValue();
+                                                                    ByteString payload = message.getPayload();
+                                                                    long timestamp = message.getTimestamp();
+                                                                    long expireTimestamp = message.getExpireTimestamp();
+                                                                    String payloadStr = payload.toStringUtf8();
 
-        String tenantId = "";
+                                                                    Map<String, Object> messageDetails = new HashMap<>();
+                                                                    messageDetails.put("topic", topic);
+                                                                    messageDetails.put("tenantId", tenantId);
+                                                                    messageDetails.put("messageId", messageId);
+                                                                    messageDetails.put("qos", pubQoSValue);
+                                                                    messageDetails.put("timestamp", timestamp);
+                                                                    messageDetails.put("event", "PUBLISH");
+                                                                    messageDetails.put("time", timestamp);
+                                                                    messageDetails.put("expireTimestamp", expireTimestamp);
+                                                                    messageDetails.put("payload", payloadStr);
+                                                                    messageDetails.put("body", payloadStr);
 
-        Iterable<PublisherMessagePack> messagePack = disted.messages();
-        messagePack.forEach(pack -> {
-            List<PublisherMessagePack.TopicPack> messagePackList = pack.getMessagePackList();
-            messagePackList.parallelStream().forEach(msg -> {
-                String topic = msg.getTopic();
-                msg.getMessageList().parallelStream().forEach(message -> {
-                    long messageId = message.getMessageId();
-                    int pubQoSValue = message.getPubQoSValue();
-                    ByteString payload = message.getPayload();
-                    long timestamp = message.getTimestamp();
-                    long expireTimestamp = message.getExpireTimestamp();
-                    String payloadStr = payload.toStringUtf8();
+                                                                    createMessageDetailsJson(disted, messageDetails);
+                                                                });
+                                                            });
+                                                });
+                                            });
+                                });
+                            });
+                });
+    }
+
+
+    /**
+     * 消息分发错误
+     */
+    private void handleDistErrorEvent(Event<?> event) {
+        Optional.ofNullable(event)
+                .map(e -> (DistError) e.clone())
+                .ifPresent(distError -> {
+                    String tenantId = "";  // This doesn't seem to change or get assigned a value based on the given code
 
                     Map<String, Object> messageDetails = new HashMap<>();
-                    messageDetails.put("topic", topic);
+                    messageDetails.put("clientId", distError.reqId());
                     messageDetails.put("tenantId", tenantId);
-                    messageDetails.put("messageId", messageId);
-                    messageDetails.put("qos", pubQoSValue);
-                    messageDetails.put("timestamp", timestamp);
-                    messageDetails.put("event", "PUBLISH");
-                    messageDetails.put("time", timestamp);
-                    messageDetails.put("expireTimestamp", expireTimestamp);
-                    messageDetails.put("payload", payloadStr);
-                    messageDetails.put("body", payloadStr);
+                    Optional.ofNullable(distError.messages())
+                            .ifPresent(messages -> messageDetails.put("message", messages.toString()));
+                    messageDetails.put("success", "success");
+                    messageDetails.put("event", "error");
+                    messageDetails.put("reqId", distError.reqId());
+                    messageDetails.put("code", distError.code());
 
-                    createMessageDetailsJson(disted, messageDetails);
+                    createMessageDetailsJson(distError, messageDetails);
                 });
-            });
-        });
     }
 
-    /*
-     * 消息分发错误
-     * */
-    private void handleDistErrorEvent(Event<?> event) {
 
-        DistError distError = (DistError) event.clone();
-        String tenantId = "";
-        Map<String, Object> messageDetails = new HashMap<>();
-        messageDetails.put("clientId", distError.reqId());
-        messageDetails.put("tenantId", tenantId);
-        messageDetails.put("message", distError.messages().toString());
-        messageDetails.put("success", "success");
-        messageDetails.put("event", "error");
-        messageDetails.put("reqId", distError.reqId());
-        messageDetails.put("code", distError.code());
-
-        createMessageDetailsJson(distError, messageDetails);
-    }
-
-    /*
+    /**
      * 客户端主动发送了DISCONNECT消息，断开连接。
-     * */
+     */
     private void handleByClientEvent(Event<?> event) {
-        ByClient byClient = (ByClient) event.clone();
+        Optional.ofNullable(event)
+                .map(e -> (ByClient) e.clone())
+                .ifPresent(byClient -> {
+                    Map<String, Object> messageDetails = new HashMap<>();
+                    messageDetails.put("tenantId", byClient.clientInfo().getTenantId());
 
-        String tenantId = byClient.clientInfo().getTenantId();
-        Map<String, String> metadataMap = byClient.clientInfo().getMetadataMap();
+                    Optional.of(byClient.clientInfo().getMetadataMap())
+                            .ifPresent(metadata -> {
+                                messageDetails.put("clientId", metadata.get("clientId"));
+                                messageDetails.put("address", metadata.get("address"));
+                            });
 
-        if (metadataMap != null) {
+                    messageDetails.put("success", "success");
+                    messageDetails.put("event", "DISCONNECT");
 
-            Map<String, Object> messageDetails = new HashMap<>();
-            messageDetails.put("tenantId", tenantId);
-            messageDetails.put("clientId", metadataMap.get("clientId"));
-            messageDetails.put("success", "success");
-            messageDetails.put("event", "DISCONNECT");
-            messageDetails.put("address", metadataMap.get("address"));
-
-            createMessageDetailsJson(byClient, messageDetails);
-        }
+                    createMessageDetailsJson(byClient, messageDetails);
+                });
     }
 
-    /*
+
+    /**
      * 服务器由于某些原因（如客户端违反协议规定）主动断开了与客户端的连接。
-     * */
+     */
     private void handleByServerEvent(Event<?> event) {
-        ByServer byServer = (ByServer) event.clone();
+        Optional.ofNullable(event)
+                .map(e -> (ByServer) e.clone())
+                .ifPresent(byServer -> {
+                    Map<String, Object> messageDetails = new HashMap<>();
+                    messageDetails.put("tenantId", byServer.clientInfo().getTenantId());
 
-        String tenantId = byServer.clientInfo().getTenantId();
-        Map<String, String> metadataMap = byServer.clientInfo().getMetadataMap();
+                    Optional.of(byServer.clientInfo().getMetadataMap())
+                            .ifPresent(metadata -> {
+                                messageDetails.put("clientId", metadata.get("clientId"));
+                                messageDetails.put("address", metadata.get("address"));
+                            });
 
-        if (metadataMap != null) {
+                    messageDetails.put("success", "success");
+                    messageDetails.put("event", "CLOSE");
 
-            Map<String, Object> messageDetails = new HashMap<>();
-            messageDetails.put("tenantId", tenantId);
-            messageDetails.put("clientId", metadataMap.get("clientId"));
-            messageDetails.put("success", "success");
-            messageDetails.put("event", "CLOSE");
-            messageDetails.put("address", metadataMap.get("address"));
-
-            createMessageDetailsJson(byServer, messageDetails);
-        }
+                    createMessageDetailsJson(byServer, messageDetails);
+                });
     }
 
-    /*
-     *  客户端被服务器踢下线，可能是因为另一个同样标识符的客户端连接到了服务器。
-     *
-     * */
+
+    /**
+     * 客户端被服务器踢下线，可能是因为另一个同样标识符的客户端连接到了服务器。
+     */
     private void handleKickedEvent(Event<?> event) {
-        Kicked kicked = (Kicked) event.clone();
+        Optional.ofNullable(event)
+                .map(e -> (Kicked) e.clone())
+                .ifPresent(kicked -> {
+                    Map<String, Object> messageDetails = new HashMap<>();
+                    messageDetails.put("tenantId", kicked.clientInfo().getTenantId());
 
-        String tenantId = kicked.clientInfo().getTenantId();
-        Map<String, String> metadataMap = kicked.clientInfo().getMetadataMap();
+                    Optional.of(kicked.clientInfo().getMetadataMap())
+                            .ifPresent(metadata -> {
+                                messageDetails.put("clientId", metadata.get("clientId"));
+                                messageDetails.put("address", metadata.get("address"));
+                            });
 
-        if (metadataMap != null) {
+                    messageDetails.put("success", "success");
+                    messageDetails.put("event", "CLOSE");
 
-            Map<String, Object> messageDetails = new HashMap<>();
-            messageDetails.put("tenantId", tenantId);
-            messageDetails.put("clientId", metadataMap.get("clientId"));
-            messageDetails.put("success", "success");
-            messageDetails.put("event", "CLOSE");
-            messageDetails.put("address", metadataMap.get("address"));
-
-            createMessageDetailsJson(kicked, messageDetails);
-        }
+                    createMessageDetailsJson(kicked, messageDetails);
+                });
     }
 
-    /*
+
+    /**
      * 消息生产
-     *
-     * */
+     */
     private void sendEventToKafka(String topic, String message) {
 
         if (CharSequenceUtil.isBlank(topic) || CharSequenceUtil.isBlank(message)) {
@@ -364,4 +376,11 @@ public final class EventKafkaProvider implements IEventCollector {
             log.info("topic:{},end", topic);
         });
     }
+
+    @Override
+    public void close() {
+        taskQueue.shutdown();
+        producer.close();
+    }
+
 }
