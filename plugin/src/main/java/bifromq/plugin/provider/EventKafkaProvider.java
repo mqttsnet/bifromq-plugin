@@ -1,6 +1,10 @@
 package bifromq.plugin.provider;
 
-import java.util.*;
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
@@ -18,6 +22,7 @@ import com.baidu.bifromq.plugin.eventcollector.mqttbroker.clientdisconnect.BySer
 import com.baidu.bifromq.plugin.eventcollector.mqttbroker.clientdisconnect.Kicked;
 import com.baidu.bifromq.plugin.eventcollector.mqttbroker.subhandling.SubAcked;
 import com.baidu.bifromq.plugin.eventcollector.mqttbroker.subhandling.UnsubAcked;
+import com.baidu.bifromq.type.ClientInfo;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.protobuf.ByteString;
@@ -219,11 +224,11 @@ public final class EventKafkaProvider implements IEventCollector {
         Optional.ofNullable(event)
                 .map(e -> (Disted) e.clone())
                 .ifPresent(disted -> {
-                    String tenantId = "";  // This doesn't seem to change or get assigned a value based on the given code
-
                     Optional.ofNullable(disted.messages())
                             .ifPresent(messagePack -> {
                                 messagePack.forEach(pack -> {
+                                    Optional<String> tenantIdOpt = Optional.ofNullable(pack.getPublisher())
+                                            .map(ClientInfo::getTenantId);
                                     Optional.of(pack.getMessagePackList())
                                             .ifPresent(messagePackList -> {
                                                 messagePackList.parallelStream().forEach(msg -> {
@@ -239,8 +244,8 @@ public final class EventKafkaProvider implements IEventCollector {
                                                                     String payloadStr = payload.toStringUtf8();
 
                                                                     Map<String, Object> messageDetails = new HashMap<>();
+                                                                    tenantIdOpt.ifPresent(tenantId -> messageDetails.put("tenantId", tenantId));
                                                                     messageDetails.put("topic", topic);
-                                                                    messageDetails.put("tenantId", tenantId);
                                                                     messageDetails.put("messageId", messageId);
                                                                     messageDetails.put("qos", pubQoSValue);
                                                                     messageDetails.put("timestamp", timestamp);
