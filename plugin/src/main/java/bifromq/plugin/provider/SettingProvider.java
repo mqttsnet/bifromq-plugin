@@ -7,7 +7,7 @@ import org.pf4j.Extension;
 
 /**
  * -----------------------------------------------------------------------------
- * File Name: CustomizedSettingProvider
+ * File Name: SettingProvider
  * -----------------------------------------------------------------------------
  * Description:
  * <a href="https://bifromq.io/zh-Hans/docs/plugin/setting_provider/">...</a>
@@ -33,7 +33,7 @@ import org.pf4j.Extension;
  */
 @Extension
 @Slf4j
-public class CustomizedSettingProvider implements ISettingProvider {
+public class SettingProvider implements ISettingProvider {
 
     @Override
     public <R> R provide(Setting setting, String tenantId) {
