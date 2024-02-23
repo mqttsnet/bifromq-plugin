@@ -13,14 +13,21 @@ Bifromq官方WIKI：https://bifromq.io/zh-Hans/docs/plugin/plugin/
 <dependency>
     <groupId>com.baidu.bifromq</groupId>
     <artifactId>bifromq-plugin-auth-provider</artifactId>
-    <version>1.0.1</version>
+    <version>2.1.1</version>
 </dependency>
 
 <dependency>
     <groupId>com.baidu.bifromq</groupId>
     <artifactId>bifromq-plugin-event-collector</artifactId>
-    <version>1.0.1</version>
+    <version>2.1.1</version>
 </dependency>
+
+<dependency>
+    <groupId>com.baidu.bifromq</groupId>
+    <artifactId>bifromq-plugin-setting-provider</artifactId>
+    <version>2.1.1</version>
+</dependency>
+
 ```
 
 ### 2. 插件说明
@@ -29,12 +36,14 @@ Bifromq官方WIKI：https://bifromq.io/zh-Hans/docs/plugin/plugin/
 |---|--------------------------------------|---------------------------------|
 |AuthProvider| bifromq.plugin.provider.AuthProvider | 用于处理Bifromq的认证插件                |
 |EventKafkaProvider| bifromq.plugin.provider.EventKafkaProvider | 用于处理Bifromq的事件采集插件,推送事件消息至Kafka |
+|SettingProvider| bifromq.plugin.provider.SettingProvider | 用于处理Bifromq的运行时变更的设置项(Setting) ，可以用于在租户级别动态调整BifroMQ的运行时行为 |
+
 
 
 ### 3. 插件配置
 
 #### 3.1 打包插件
- 使用maven package命令打包插件，打包后的插件位于target目录下，如：bifromq-plugin-auth-provider-1.0.1.jar
+ 使用maven package命令打包插件，打包后的插件位于target目录下，如：bifromq-plugin-1.0.0-SNAPSHOT.jar
 
 #### 3.2 配置插件
 将打包好的插件放置于Bifromq的插件目录下，如：/opt/bifromq/plugins/，并在Bifromq的配置文件中配置插件，如：
@@ -45,4 +54,5 @@ Bifromq官方WIKI：https://bifromq.io/zh-Hans/docs/plugin/plugin/
 ```conf/standalone.yaml
 # 插件配置
 authProviderFQN: bifromq.plugin.provider.AuthProvider
+settingProviderFQN: bifromq.plugin.provider.SettingProvider
 
