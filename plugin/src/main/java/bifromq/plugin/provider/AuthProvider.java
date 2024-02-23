@@ -1,8 +1,5 @@
 package bifromq.plugin.provider;
 
-import java.util.Optional;
-import java.util.concurrent.*;
-
 import bifromq.plugin.config.ConfigUtil;
 import cn.hutool.http.HttpResponse;
 import cn.hutool.http.HttpUtil;
@@ -15,6 +12,36 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.pf4j.Extension;
 import org.springframework.http.HttpStatus;
+
+import java.util.Optional;
+import java.util.concurrent.*;
+
+/**
+ * -----------------------------------------------------------------------------
+ * File Name: EventKafkaProvider
+ * -----------------------------------------------------------------------------
+ * Description:
+ * <a href="https://bifromq.io/zh-Hans/docs/plugin/auth_provider/">...</a>
+ * Auth Provider插件旨在为BifroMQ运行时提供验证MQTT客户端连接和授权发布/订阅消息主题的能力
+ *
+ * 1. 实现IAuthProvider接口
+ * 2. 通过@Extension注解标记为插件
+ * 3. 实现auth方法，调用ThingLinks 的认证接口验证客户端连接
+ * 4. 实现check方法，验证客户端是否有权限执行指定的操作
+ *
+ * -----------------------------------------------------------------------------
+ *
+ * @author xiaonannet
+ * @version 1.0
+ * -----------------------------------------------------------------------------
+ * Revision History:
+ * Date         Author          Version     Description
+ * --------      --------     -------   --------------------
+ * 2024/2/23       xiaonannet        1.0        Initial creation
+ * -----------------------------------------------------------------------------
+ * @email
+ * @date 2024/2/23 15:36
+ */
 
 @Extension
 @Slf4j
@@ -51,7 +78,7 @@ public final class AuthProvider implements IAuthProvider {
 
         if (StringUtils.isNotBlank(clientId) && StringUtils.isNotBlank(password) && StringUtils.isNotBlank(username)) {
             return CompletableFuture.supplyAsync(() -> clientConnectionAuthentication(clientId, password, username), executor)
-                                    .thenApply(this::handleAuthenticationResponse);
+                    .thenApply(this::handleAuthenticationResponse);
         } else {
             return CompletableFuture.completedFuture(createRejectResponse());
         }
@@ -66,8 +93,8 @@ public final class AuthProvider implements IAuthProvider {
         jsonObject.put("authMode", 0);
 
         return HttpUtil.createPost(clientConnectionUrl)
-                       .body(jsonObject.toJSONString())
-                       .execute();
+                .body(jsonObject.toJSONString())
+                .execute();
     }
 
     private MQTT3AuthResult handleAuthenticationResponse(HttpResponse response) {
@@ -89,18 +116,18 @@ public final class AuthProvider implements IAuthProvider {
         if (certificationResult) {
             Optional<JSONObject> deviceResultJson = Optional.ofNullable(responseJson.getJSONObject("deviceResult"));
             String clientId = deviceResultJson.flatMap(json -> Optional.ofNullable(json.getString("clientId")))
-                                              .orElse("");
+                    .orElse("");
             String tenantId = Optional.ofNullable(responseJson.getString("tenantId"))
-                                      .orElse("");
+                    .orElse("");
 
             log.info("Authentication successful - clientId: {}, tenantId: {}", clientId, tenantId);
 
             return MQTT3AuthResult.newBuilder()
-                                  .setOk(Ok.newBuilder()
-                                           .setTenantId(tenantId)
-                                           .setUserId(clientId)
-                                           .build())
-                                  .build();
+                    .setOk(Ok.newBuilder()
+                            .setTenantId(tenantId)
+                            .setUserId(clientId)
+                            .build())
+                    .build();
         } else {
             log.info("Authentication failed");
             return createRejectResponse();
@@ -110,10 +137,10 @@ public final class AuthProvider implements IAuthProvider {
     private MQTT3AuthResult createRejectResponse() {
         log.info("Authentication rejected");
         return MQTT3AuthResult.newBuilder()
-                              .setReject(Reject.newBuilder()
-                                               .setCode(Reject.Code.NotAuthorized)
-                                               .build())
-                              .build();
+                .setReject(Reject.newBuilder()
+                        .setCode(Reject.Code.NotAuthorized)
+                        .build())
+                .build();
     }
 
     @Override

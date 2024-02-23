@@ -1,13 +1,5 @@
 package bifromq.plugin.provider;
 
-import java.util.EnumMap;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Properties;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
-
 import bifromq.plugin.config.ConfigUtil;
 import bifromq.plugin.utils.TaskQueue;
 import cn.hutool.core.text.CharSequenceUtil;
@@ -16,6 +8,7 @@ import com.baidu.bifromq.plugin.eventcollector.EventType;
 import com.baidu.bifromq.plugin.eventcollector.IEventCollector;
 import com.baidu.bifromq.plugin.eventcollector.distservice.DistError;
 import com.baidu.bifromq.plugin.eventcollector.distservice.Disted;
+import com.baidu.bifromq.plugin.eventcollector.mqttbroker.PingReq;
 import com.baidu.bifromq.plugin.eventcollector.mqttbroker.clientconnected.ClientConnected;
 import com.baidu.bifromq.plugin.eventcollector.mqttbroker.clientdisconnect.ByClient;
 import com.baidu.bifromq.plugin.eventcollector.mqttbroker.clientdisconnect.ByServer;
@@ -33,6 +26,35 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.pf4j.Extension;
 
+import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+
+/**
+ * -----------------------------------------------------------------------------
+ * File Name: EventKafkaProvider
+ * -----------------------------------------------------------------------------
+ * Description:
+ * <a href="https://bifromq.io/zh-Hans/docs/plugin/event_collector/">...</a>
+ * 事件收集器
+ *
+ * 1. 实现IEventCollector接口
+ * 2. 通过@Extension注解标记为插件
+ * 3. 实现report方法，将事件发送到Kafka
+ * 4. 实现close方法，关闭资源
+ * -----------------------------------------------------------------------------
+ *
+ * @author xiaonannet
+ * @version 1.0
+ * -----------------------------------------------------------------------------
+ * Revision History:
+ * Date         Author          Version     Description
+ * --------      --------     -------   --------------------
+ * 2024/2/23       xiaonannet        1.0        Initial creation
+ * -----------------------------------------------------------------------------
+ * @email
+ * @date 2024/2/23 15:36
+ */
 @Extension
 @Slf4j
 public final class EventKafkaProvider implements IEventCollector {
@@ -55,6 +77,7 @@ public final class EventKafkaProvider implements IEventCollector {
         TOPIC_MAP.put(EventType.BY_CLIENT, "client.disconnect.topic");
         TOPIC_MAP.put(EventType.BY_SERVER, "server.disconnect.topic");
         TOPIC_MAP.put(EventType.KICKED, "device.kicked.topic");
+        TOPIC_MAP.put(EventType.PING_REQ, "ping.req.topic");
     }
 
     public EventKafkaProvider() {
@@ -103,15 +126,25 @@ public final class EventKafkaProvider implements IEventCollector {
 
                 // 客户端被服务器踢下线，可能是因为另一个同样标识符的客户端连接到了服务器
                 case KICKED -> executeEvent(event, this::handleKickedEvent);
+
+                // 客户端发送了PING REQ消息
+                case PING_REQ -> executeEvent(event, this::handlePingReqEvent);
                 default -> log.warn("Discarding events of type {} as no handler exists.", event.type());
             }
         });
     }
 
     private void executeEvent(Event<?> event, Consumer<Event<?>> handler) {
-        log.info("executeEvent:{} start", event.type());
+        // 记录开始执行事件的日志，包括事件类型和当前时间戳（或其他相关信息）
+        long startTime = System.currentTimeMillis();
+        log.info("Starting execution of event: '{}'. Time: {}", event.type(), startTime);
+
+        // 执行事件处理器
         handler.accept(event);
-        log.info("executeEvent:{} end", event.type());
+
+        // 记录事件执行完成的日志，包括事件类型和耗时
+        long endTime = System.currentTimeMillis();
+        log.info("Completed execution of event: '{}'. Duration: {} ms", event.type(), endTime - startTime);
     }
 
     private void createMessageDetailsJson(Event<?> event, Map<String, Object> details) {
@@ -358,6 +391,30 @@ public final class EventKafkaProvider implements IEventCollector {
                     messageDetails.put("event", "CLOSE");
 
                     createMessageDetailsJson(kicked, messageDetails);
+                });
+    }
+
+
+    /**
+     * 客户端发送了PING REQ消息
+     */
+    private void handlePingReqEvent(Event<?> event) {
+        Optional.ofNullable(event)
+                .map(e -> (PingReq) e.clone())
+                .ifPresent(pingReq -> {
+                    Map<String, Object> messageDetails = new HashMap<>();
+                    messageDetails.put("tenantId", pingReq.clientInfo().getTenantId());
+
+                    Optional.of(pingReq.clientInfo().getMetadataMap())
+                            .ifPresent(metadata -> {
+                                messageDetails.put("clientId", metadata.get("clientId"));
+                                messageDetails.put("address", metadata.get("address"));
+                            });
+
+                    messageDetails.put("success", "success");
+                    messageDetails.put("event", "PING");
+
+                    createMessageDetailsJson(pingReq, messageDetails);
                 });
     }
 
