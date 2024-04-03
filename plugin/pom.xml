@@ -21,21 +21,21 @@
         <dependency>
             <groupId>com.baidu.bifromq</groupId>
             <artifactId>bifromq-plugin-auth-provider</artifactId>
-            <version>2.1.1</version>
+            <version>3.0.0</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.baidu.bifromq/bifromq-plugin-event-collector -->
         <dependency>
             <groupId>com.baidu.bifromq</groupId>
             <artifactId>bifromq-plugin-event-collector</artifactId>
-            <version>2.1.1</version>
+            <version>3.0.0</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.baidu.bifromq/bifromq-plugin-setting-provider -->
         <dependency>
             <groupId>com.baidu.bifromq</groupId>
             <artifactId>bifromq-plugin-setting-provider</artifactId>
-            <version>2.1.1</version>
+            <version>3.0.0</version>
         </dependency>
 
 
