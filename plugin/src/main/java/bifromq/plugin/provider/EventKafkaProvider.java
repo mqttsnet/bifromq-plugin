@@ -69,15 +69,15 @@ public final class EventKafkaProvider implements IEventCollector {
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     static {
-        TOPIC_MAP.put(EventType.CLIENT_CONNECTED, "client.connected.topic");
-        TOPIC_MAP.put(EventType.SUB_ACKED, "subscription.acked.topic");
-        TOPIC_MAP.put(EventType.UNSUB_ACKED, "unsubscription.acked.topic");
-        TOPIC_MAP.put(EventType.DISTED, "distribution.completed.topic");
-        TOPIC_MAP.put(EventType.DIST_ERROR, "distribution.error.topic");
-        TOPIC_MAP.put(EventType.BY_CLIENT, "client.disconnect.topic");
-        TOPIC_MAP.put(EventType.BY_SERVER, "server.disconnect.topic");
-        TOPIC_MAP.put(EventType.KICKED, "device.kicked.topic");
-        TOPIC_MAP.put(EventType.PING_REQ, "ping.req.topic");
+        TOPIC_MAP.put(EventType.CLIENT_CONNECTED, "mqtt.client.connected.topic");
+        TOPIC_MAP.put(EventType.SUB_ACKED, "mqtt.subscription.acked.topic");
+        TOPIC_MAP.put(EventType.UNSUB_ACKED, "mqtt.unsubscription.acked.topic");
+        TOPIC_MAP.put(EventType.DISTED, "mqtt.distribution.completed.topic");
+        TOPIC_MAP.put(EventType.DIST_ERROR, "mqtt.distribution.error.topic");
+        TOPIC_MAP.put(EventType.BY_CLIENT, "mqtt.client.disconnect.topic");
+        TOPIC_MAP.put(EventType.BY_SERVER, "mqtt.server.disconnect.topic");
+        TOPIC_MAP.put(EventType.KICKED, "mqtt.device.kicked.topic");
+        TOPIC_MAP.put(EventType.PING_REQ, "mqtt.ping.req.topic");
     }
 
     public EventKafkaProvider() {

@@ -4,7 +4,9 @@ Bifromq 插件库
 ## 说明
 这是一个Bifromq插件库，用于处理Bifromq与物联网业务系统相关集成。
 
-Bifromq官方WIKI：https://bifromq.io/zh-Hans/docs/plugin/plugin/
+-[部署使用教程](https://mqttsnet.yuque.com/trgbro/thinglinks-pro/rxzz02p70az2lvb7)
+
+-[Bifromq官方WIKI](https://bifromq.io/zh-Hans/docs/plugin/plugin/)
 
 ## 用法
 ### 1. 引入依赖
@@ -13,19 +15,19 @@ Bifromq官方WIKI：https://bifromq.io/zh-Hans/docs/plugin/plugin/
 <dependency>
     <groupId>com.baidu.bifromq</groupId>
     <artifactId>bifromq-plugin-auth-provider</artifactId>
-    <version>2.1.1</version>
+    <version>3.0.0</version>
 </dependency>
 
 <dependency>
     <groupId>com.baidu.bifromq</groupId>
     <artifactId>bifromq-plugin-event-collector</artifactId>
-    <version>2.1.1</version>
+    <version>3.0.0</version>
 </dependency>
 
 <dependency>
     <groupId>com.baidu.bifromq</groupId>
     <artifactId>bifromq-plugin-setting-provider</artifactId>
-    <version>2.1.1</version>
+    <version>3.0.0</version>
 </dependency>
 
 ```
