@@ -273,7 +273,7 @@ public final class EventKafkaProvider implements IEventCollector {
                                                                     int pubQoSValue = message.getPubQoSValue();
                                                                     ByteString payload = message.getPayload();
                                                                     long timestamp = message.getTimestamp();
-                                                                    long expireTimestamp = message.getExpireTimestamp();
+                                                                    long expiryInterval = message.getExpiryInterval();
                                                                     String payloadStr = payload.toStringUtf8();
 
                                                                     Map<String, Object> messageDetails = new HashMap<>();
@@ -284,7 +284,7 @@ public final class EventKafkaProvider implements IEventCollector {
                                                                     messageDetails.put("timestamp", timestamp);
                                                                     messageDetails.put("event", "PUBLISH");
                                                                     messageDetails.put("time", timestamp);
-                                                                    messageDetails.put("expireTimestamp", expireTimestamp);
+                                                                    messageDetails.put("expiryInterval", expiryInterval);
                                                                     messageDetails.put("payload", payloadStr);
                                                                     messageDetails.put("body", payloadStr);
 
