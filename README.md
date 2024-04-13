@@ -34,6 +34,8 @@ Bifromq 插件库
 
 ### 2. 插件说明
 
+Bifromq 服务端支持版本：3.0.0
+
 |插件名| 所在位置                                 | 说明                              |
 |---|--------------------------------------|---------------------------------|
 |AuthProvider| bifromq.plugin.provider.AuthProvider | 用于处理Bifromq的认证插件                |
