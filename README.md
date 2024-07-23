@@ -15,26 +15,27 @@ Bifromq 插件库
 <dependency>
     <groupId>com.baidu.bifromq</groupId>
     <artifactId>bifromq-plugin-auth-provider</artifactId>
-    <version>3.2.0</version>
+    <version>3.2.1</version>
 </dependency>
 
 <dependency>
     <groupId>com.baidu.bifromq</groupId>
     <artifactId>bifromq-plugin-event-collector</artifactId>
-    <version>3.2.0</version>
+    <version>3.2.1</version>
 </dependency>
 
 <dependency>
     <groupId>com.baidu.bifromq</groupId>
     <artifactId>bifromq-plugin-setting-provider</artifactId>
-    <version>3.2.0</version>
+    <version>3.2.1</version>
 </dependency>
 
 ```
 
 ### 2. 插件说明
 
-Bifromq 服务端支持版本：3.2.0
+Bifromq 服务端支持版本：3.2.1
+注意：请保持插件版本和bifromq服务版本一致
 
 |插件名| 所在位置                                 | 说明                              |
 |---|--------------------------------------|---------------------------------|

@@ -7,7 +7,7 @@
     <parent>
         <groupId>bifromq.plugin</groupId>
         <artifactId>plugin-parent</artifactId>
-        <version>3.2.0-SNAPSHOT</version>
+        <version>3.2.1-SNAPSHOT</version>
     </parent>
 
     <artifactId>plugin</artifactId>
@@ -21,21 +21,21 @@
         <dependency>
             <groupId>com.baidu.bifromq</groupId>
             <artifactId>bifromq-plugin-auth-provider</artifactId>
-            <version>3.2.0</version>
+            <version>3.2.1</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.baidu.bifromq/bifromq-plugin-event-collector -->
         <dependency>
             <groupId>com.baidu.bifromq</groupId>
             <artifactId>bifromq-plugin-event-collector</artifactId>
-            <version>3.2.0</version>
+            <version>3.2.1</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.baidu.bifromq/bifromq-plugin-setting-provider -->
         <dependency>
             <groupId>com.baidu.bifromq</groupId>
             <artifactId>bifromq-plugin-setting-provider</artifactId>
-            <version>3.2.0</version>
+            <version>3.2.1</version>
         </dependency>
 
 
