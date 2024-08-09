@@ -39,7 +39,7 @@ public class SettingProvider implements ISettingProvider {
     public <R> R provide(Setting setting, String tenantId) {
         if (setting == Setting.DebugModeEnabled) {
             Boolean r = checkDebugMode(tenantId);
-            log.debug("Debug mode for tenant {} is {}", tenantId, r);
+            log.info("Debug mode for tenant {} is {}", tenantId, r);
             return (R) r;
         }
         return setting.current(tenantId);
