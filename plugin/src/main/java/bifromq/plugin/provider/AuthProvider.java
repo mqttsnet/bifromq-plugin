@@ -23,12 +23,12 @@ import java.util.concurrent.*;
  * Description:
  * <a href="https://bifromq.io/zh-Hans/docs/plugin/auth_provider/">...</a>
  * Auth Provider插件旨在为BifroMQ运行时提供验证MQTT客户端连接和授权发布/订阅消息主题的能力
- *
+ * <p>
  * 1. 实现IAuthProvider接口
  * 2. 通过@Extension注解标记为插件
  * 3. 实现auth方法，调用ThingLinks 的认证接口验证客户端连接
  * 4. 实现check方法，验证客户端是否有权限执行指定的操作
- *
+ * <p>
  * -----------------------------------------------------------------------------
  *
  * @author xiaonannet
@@ -74,23 +74,32 @@ public final class AuthProvider implements IAuthProvider {
         String clientId = authData.getClientId();
         String password = authData.getPassword().toStringUtf8();
         String username = authData.getUsername();
-        log.info("Authenticating client - clientId: {}, username: {}, password: {}", clientId, username, password);
+        String cert = authData.getCert().toStringUtf8();
+        log.info("Authenticating client - clientId: {}, username: {}, password: {}, cert:{}", clientId, username, password, cert);
 
-        if (StringUtils.isNotBlank(clientId) && StringUtils.isNotBlank(password) && StringUtils.isNotBlank(username)) {
-            return CompletableFuture.supplyAsync(() -> clientConnectionAuthentication(clientId, password, username), executor)
+        if (StringUtils.isNotBlank(clientId)) {
+            return CompletableFuture.supplyAsync(() -> clientConnectionAuthentication(clientId, password, username, cert), executor)
                     .thenApply(this::handleAuthenticationResponse);
         } else {
             return CompletableFuture.completedFuture(createRejectResponse());
         }
     }
 
-    private HttpResponse clientConnectionAuthentication(String clientId, String password, String username) {
+    private HttpResponse clientConnectionAuthentication(String clientId, String password, String username, String cert) {
         JSONObject jsonObject = new JSONObject();
         jsonObject.put("clientIdentifier", clientId);
         jsonObject.put("password", password);
         jsonObject.put("username", username);
         jsonObject.put("protocolType", "MQTT");
-        jsonObject.put("authMode", 0);
+        if (StringUtils.isNotBlank(cert)) {
+            // SSL证书认证
+            jsonObject.put("authMode", 1);
+            jsonObject.put("clientCertificate", cert);
+        } else {
+            // 用户名密码认证
+            jsonObject.put("authMode", 0);
+        }
+        jsonObject.put("clientCertificate", cert);
 
         return HttpUtil.createPost(clientConnectionUrl)
                 .body(jsonObject.toJSONString())
