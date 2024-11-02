@@ -1,3 +1,3 @@
 eventCollectorConfig:
   # The kafka topic to which the events are published
-  kafkaBootstrapServer: "124.223.113.139:9092"
+  kafkaBootstrapServer: "127.0.0.1:9092"
