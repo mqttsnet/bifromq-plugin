@@ -15,7 +15,7 @@ public class PluginConfig {
     /**
      * 启用或禁用 MQTT 版本 3.1.1 支持
      */
-    private Boolean mQTT4Enabled;
+    private Boolean MQTT4Enabled;
 
     /**
      * 启用或禁用 MQTT 版本 5.0 支持
