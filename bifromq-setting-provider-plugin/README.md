@@ -76,7 +76,7 @@ unzip target/bifromq-setting-provider-plugin-1.0.0.zip -d /path/to/bifromq/plugi
 在 BifroMQ 中运行此插件时，需要通过配置文件指定 Setting Provider 的完全限定类名（FQN）。请注意，BifroMQ 一次只允许运行一个
 Setting Provider 实例。
 
-在 BifroMQ 配置文件（如 standalone.yml）中添加以下内容：
+在 BifroMQ 配置文件 `standalone.yml` 中添加以下内容：
 
 ```yaml
 settingProviderFQN: com.mqttsnet.thinglinks.BifromqSettingProviderPluginSettingProvider
@@ -106,7 +106,8 @@ public class BifromqSettingProviderContext {
 
 ### 如何在不重启 BifroMQ 的情况下更新配置？
 
-可以直接修改 `config.yaml` 中的配置项，并重启插件实现动态更新。
+可以直接修改 BifroMQ 配置文件 `standalone.yml` 中的配置项，并重启插件实现动态更新。
+程序会自动覆盖模块 `conf/config.yaml` 中定义的配置（standalone.yml 优先级高于 config.yaml）
 
 ### 如何启用详细日志？
 

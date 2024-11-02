@@ -12,8 +12,8 @@
 
     <modules>
         <module>event-provider</module>
-        <module>plugin-context</module>
-        <module>plugin-build</module>
+        <module>event-plugin-context</module>
+        <module>event-plugin-build</module>
     </modules>
 
     <properties>
@@ -166,14 +166,6 @@
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
                 <version>2.18.1</version>
-            </dependency>
-
-
-            <!-- https://mvnrepository.com/artifact/commons-beanutils/commons-beanutils -->
-            <dependency>
-                <groupId>commons-beanutils</groupId>
-                <artifactId>commons-beanutils</artifactId>
-                <version>1.9.4</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.slf4j/slf4j-api -->

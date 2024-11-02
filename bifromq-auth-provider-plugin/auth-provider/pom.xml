@@ -10,6 +10,11 @@
     </parent>
 
     <artifactId>auth-provider</artifactId>
+    <version>1.0.0</version>
+
+    <name>${project.artifactId}</name>
+    <url>https://www.mqttsnet.com</url>
+    <description>auth-provider</description>
 
     <dependencies>
         <dependency>
@@ -18,7 +23,8 @@
         </dependency>
         <dependency>
             <groupId>com.mqttsnet.thinglinks</groupId>
-            <artifactId>plugin-context</artifactId>
+            <artifactId>auth-plugin-context</artifactId>
+            <version>1.0.0</version>
         </dependency>
         <dependency>
             <groupId>com.baidu.bifromq</groupId>
