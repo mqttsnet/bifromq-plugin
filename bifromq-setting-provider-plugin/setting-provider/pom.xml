@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.mqttsnet.thinglinks</groupId>
+        <artifactId>bifromq-setting-provider-plugin</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>setting-provider</artifactId>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.baidu.bifromq</groupId>
+            <artifactId>bifromq-plugin-context</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.mqttsnet.thinglinks</groupId>
+            <artifactId>plugin-context</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.baidu.bifromq</groupId>
+            <artifactId>bifromq-plugin-setting-provider</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.pf4j</groupId>
+            <artifactId>pf4j</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>compile</scope>
+        </dependency>
+    </dependencies>
+</project>

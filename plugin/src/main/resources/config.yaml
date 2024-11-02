@@ -1,6 +1,0 @@
-authProviderConfig:
-  # The URL of the authentication provider service
-  authConnectionUrl: http://127.0.0.1:19100/link/deviceOpenAny/clientConnectionAuthentication
-eventCollectorConfig:
-    # The kafka topic to which the events are published
-  kafkaBootstrapServer: "127.0.0.1:9092"

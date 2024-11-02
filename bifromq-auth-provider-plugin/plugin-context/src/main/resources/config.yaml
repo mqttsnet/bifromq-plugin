@@ -1,0 +1,4 @@
+authProviderConfig:
+  # The URL of the authentication provider service
+  authConnectionUrl: https://pro-test-gateway.thinglinks.mqttsnet.com/api/link/deviceOpen/anyTenant/clientConnectionAuthentication
+#  authConnectionUrl: http://127.0.0.1:18760/api/link/deviceOpen/anyTenant/clientConnectionAuthentication
