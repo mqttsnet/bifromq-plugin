@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- 项目信息 -->
+    <groupId>com.mqttsnet.thinglinks</groupId>
+    <artifactId>bifromq-plugin</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+
+
+    <name>bifromq-plugin</name>
+    <url>https://www.mqttsnet.com</url>
+    <description>A comprehensive collection of modular and hot-swappable plugin examples, designed to demonstrate the
+        dynamic extension and customization capabilities of the ThingLinks platform using the Open EXP framework.
+    </description>
+
+    <modules>
+        <module>bifromq-auth-provider-plugin</module>
+        <module>bifromq-event-collector-plugin</module>
+        <module>bifromq-setting-provider-plugin</module>
+    </modules>
+
+    <properties>
+        <maven.compiler.plugin.version>3.10.1</maven.compiler.plugin.version>
+        <maven.assembly.plugin.version>3.4.1</maven.assembly.plugin.version>
+        <maven.resources.plugin.version>3.2.0</maven.resources.plugin.version>
+
+        <java.source.version>17</java.source.version>
+        <java.target.version>17</java.target.version>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+    </properties>
+
+    <repositories>
+        <repository>
+            <id>central</id>
+            <url>https://repo.maven.apache.org/maven2</url>
+        </repository>
+        <repository>
+            <id>aliyun</id>
+            <name>aliyun</name>
+            <url>https://maven.aliyun.com/repository/public</url>
+        </repository>
+        <repository>
+            <id>spring-milestones</id>
+            <name>Spring Milestones</name>
+            <url>https://repo.spring.io/libs-milestone</url>
+        </repository>
+        <repository>
+            <id>oss-public</id>
+            <url>https://oss.sonatype.org/content/repositories/public</url>
+        </repository>
+    </repositories>
+
+    <pluginRepositories>
+        <pluginRepository>
+            <id>aliyun-plugin</id>
+            <url>https://maven.aliyun.com/repository/public</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </pluginRepository>
+    </pluginRepositories>
+
+
+
+
+</project>
