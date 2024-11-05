@@ -1,0 +1,30 @@
+MQTT3Enabled: true  # 启用或禁用 MQTT 版本 3.1 支持
+MQTT4Enabled: true  # 启用或禁用 MQTT 版本 3.1.1 支持
+MQTT5Enabled: true  # 启用或禁用 MQTT 版本 5.0 支持
+DebugModeEnabled: false  # 启用或禁用调试模式
+ForceTransient: false  # 强制连接采用瞬态模式
+ByPassPermCheckError: true  # 绕过权限检查错误
+PayloadFormatValidationEnabled: true  # 启用或禁用有效载荷格式验证
+RetainEnabled: true  # 启用或禁用消息保留功能
+WildcardSubscriptionEnabled: true  # 启用或禁用通配符订阅
+SubscriptionIdentifierEnabled: true  # 启用或禁用订阅标识符
+SharedSubscriptionEnabled: true  # 启用或禁用共享订阅
+MaximumQoS: 2  # 设置最高 QoS 级别
+MaxTopicLevelLength: 40  # 每个主题级别的最大长度
+MaxTopicLevels: 16  # 主题级别的最大数量
+MaxTopicLength: 255  # 主题的最大总长度
+MaxTopicAlias: 10  # 主题别名的最大数量
+MaxSharedGroupMembers: 200  # 共享订阅组的最大成员数
+MaxTopicFiltersPerInbox: 100  # 每个收件箱的最大主题过滤器数
+MsgPubPerSec: 200  # 每个连接每秒发布的最大消息数
+ReceivingMaximum: 200  # 每个连接每秒接收消息的最大数量
+InBoundBandWidth: 524288  # 每个连接的最大入站带宽（以字节为单位）
+OutBoundBandWidth: 524288  # 每个连接的最大出站带宽（以字节为单位）
+MaxUserPayloadBytes: 262144  # 最大用户有效负载大小（以字节为单位）
+MaxResendTimes: 3  # 当 QoS 为 1 或 2 时，可以重新发送消息的最大次数
+ResendTimeoutSeconds: 10  # 考虑重新发送消息之前的超时时间（秒）
+MaxTopicFiltersPerSub: 10  # 每个订阅的最大主题过滤器数
+MaxSessionExpirySeconds: 86400  # 最大会话过期时间（以秒为单位）
+SessionInboxSize: 1000  # 会话收件箱的最大大小
+QoS0DropOldest: false  # 是否首先丢弃最旧的 QoS 0 消息
+RetainMessageMatchLimit: 10  # 保留消息匹配的限制

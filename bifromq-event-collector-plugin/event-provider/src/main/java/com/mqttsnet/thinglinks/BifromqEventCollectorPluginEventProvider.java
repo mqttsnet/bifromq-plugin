@@ -114,6 +114,7 @@ public final class BifromqEventCollectorPluginEventProvider implements IEventCol
     public void report(Event<?> eventObj) {
 
         Event<?> event = (Event<?>) eventObj.clone();
+        log.info("Received event: {}", event.toString());
 
         taskQueue.addTask(() -> {
 

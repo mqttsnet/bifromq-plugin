@@ -15,6 +15,7 @@ package com.mqttsnet.thinglinks;
 
 import com.baidu.bifromq.plugin.settingprovider.ISettingProvider;
 import com.baidu.bifromq.plugin.settingprovider.Setting;
+import com.mqttsnet.thinglinks.config.PluginConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.pf4j.Extension;
 
@@ -48,6 +49,28 @@ import org.pf4j.Extension;
 @Slf4j
 @Extension
 public final class BifromqSettingProviderPluginSettingProvider implements ISettingProvider {
+
+
+    private final PluginConfig pluginConfig;
+
+    /**
+     * 构造函数，通过 {@link BifromqSettingProviderContext} 初始化配置。
+     *
+     * @param context {@link BifromqSettingProviderContext} 认证插件的上下文，包含配置信息。
+     */
+    public BifromqSettingProviderPluginSettingProvider(BifromqSettingProviderContext context) {
+        this.pluginConfig = context.getPluginConfig();
+    }
+
+
+    /**
+     * 提供指定设置的值。
+     *
+     * @param setting  设定项
+     * @param tenantId 租户 ID
+     * @param <R>      返回类型
+     * @return 设置的值
+     */
     @Override
     public <R> R provide(Setting setting, String tenantId) {
         if (setting == Setting.DebugModeEnabled) {
@@ -58,15 +81,23 @@ public final class BifromqSettingProviderPluginSettingProvider implements ISetti
         return setting.current(tenantId);
     }
 
+    /**
+     * 检查指定租户的调试模式。
+     *
+     * @param tenantId 租户 ID
+     * @return 是否启用调试模式
+     */
     private boolean checkDebugMode(String tenantId) {
-        // TODO Custom logic to check debug mode
-
-        return true;
+        // 自定义逻辑检查调试模式
+        return true; // 示例逻辑，替换为实际实现
     }
 
+    /**
+     * 关闭设置提供者，执行必要的清理操作。
+     */
     @Override
     public void close() {
-        // Custom close actions if necessary
+        // 自定义关闭逻辑（如果需要）
         ISettingProvider.super.close();
     }
 }
