@@ -20,6 +20,7 @@
     <modules>
         <module>bifromq-auth-provider-plugin</module>
         <module>bifromq-event-collector-plugin</module>
+        <module>bifromq-resource-throttler-plugin</module>
         <module>bifromq-setting-provider-plugin</module>
     </modules>
 

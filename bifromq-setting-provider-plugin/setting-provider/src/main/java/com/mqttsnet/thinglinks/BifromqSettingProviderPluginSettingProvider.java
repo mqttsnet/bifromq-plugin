@@ -73,14 +73,12 @@ public final class BifromqSettingProviderPluginSettingProvider implements ISetti
      */
     @Override
     public <R> R provide(Setting setting, String tenantId) {
-        switch (setting) {
-            case DebugModeEnabled:
-                return (R) Boolean.valueOf(checkDebugMode(tenantId));
-            // 添加其他设置项的处理
-            default:
-                log.warn("Unknown setting: {}", setting);
-                return null;
+        if (setting == Setting.DebugModeEnabled) {
+            Boolean r = checkDebugMode(tenantId);
+            log.info("Debug mode for tenant {} is {}", tenantId, r);
+            return (R) r;
         }
+        return setting.current(tenantId);
     }
 
     /**
