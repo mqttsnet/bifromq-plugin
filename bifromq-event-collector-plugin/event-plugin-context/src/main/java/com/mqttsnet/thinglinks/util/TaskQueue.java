@@ -43,11 +43,8 @@ public class TaskQueue {
             executorService.submit(() -> {
                 try {
                     while (true) {
-                        log.info("Waiting for task, executing on thread: " + Thread.currentThread().getName());
                         Runnable task = tasks.take(); // This will block if the queue is empty
-                        log.info("Beginning task execution on thread: " + Thread.currentThread().getName());
                         task.run();
-                        log.info("Task execution completed on thread: " + Thread.currentThread().getName());
                     }
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
@@ -64,7 +61,6 @@ public class TaskQueue {
      */
     public void addTask(Runnable task) {
         try {
-            log.info("Adding new task...");
             tasks.put(task);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

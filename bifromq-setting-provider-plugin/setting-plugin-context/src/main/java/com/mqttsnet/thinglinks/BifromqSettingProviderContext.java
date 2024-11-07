@@ -17,12 +17,12 @@ public final class BifromqSettingProviderContext extends BifroMQPluginContext {
         this.bifroMQPluginDescriptor = descriptor;
         // 使用ConfigUtil加载配置
         pluginConfig = ConfigUtil.getPluginConfig();
-        log.info("Initialized BifromqEventCollectorContext with descriptor: {}", bifroMQPluginDescriptor.getDescriptor().toString());
+        log.info("Initialized BifromqSettingProviderContext with descriptor: {}", bifroMQPluginDescriptor.getDescriptor().toString());
     }
 
     @Override
     protected void init() {
-        log.info("Starting initialization of BifromqEventCollectorContext for plugin: {}", bifroMQPluginDescriptor.getDescriptor().toString());
+        log.info("Starting initialization of BifromqSettingProviderContext for plugin: {}", bifroMQPluginDescriptor.getDescriptor().toString());
         log.debug("Plugin root path: {}", bifroMQPluginDescriptor.getPluginRoot());
         log.debug("Development mode: {}", bifroMQPluginDescriptor.isDevelopment());
 
@@ -37,14 +37,14 @@ public final class BifromqSettingProviderContext extends BifroMQPluginContext {
 
     @Override
     protected void close() {
-        log.info("Closing BifromqEventCollectorContext for plugin: {}", bifroMQPluginDescriptor.getDescriptor().toString());
+        log.info("Closing BifromqSettingProviderContext for plugin: {}", bifroMQPluginDescriptor.getDescriptor().toString());
 
         try {
             log.debug("Releasing resources for plugin...");
             // TODO 插入资源释放代码
             log.info("Resources released successfully for {}", bifroMQPluginDescriptor.getDescriptor().toString());
         } catch (Exception e) {
-            log.error("Failed to close BifromqEventCollectorContext for plugin {}: {}", bifroMQPluginDescriptor.getDescriptor().toString(), e.getMessage(), e);
+            log.error("Failed to close BifromqSettingProviderContext for plugin {}: {}", bifroMQPluginDescriptor.getDescriptor().toString(), e.getMessage(), e);
         }
     }
 
