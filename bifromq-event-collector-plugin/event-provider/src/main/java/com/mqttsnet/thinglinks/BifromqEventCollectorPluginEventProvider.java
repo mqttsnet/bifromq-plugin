@@ -114,7 +114,7 @@ public final class BifromqEventCollectorPluginEventProvider implements IEventCol
     public void report(Event<?> eventObj) {
 
         Event<?> event = (Event<?>) eventObj.clone();
-        log.info("Received event: {}", event.toString());
+        log.info("Received event: {}", event);
 
         taskQueue.addTask(() -> {
 
@@ -204,7 +204,10 @@ public final class BifromqEventCollectorPluginEventProvider implements IEventCol
                         messageDetails.put("clientId", metadataMap.getOrDefault("clientId", ""));
                         messageDetails.put("success", "success");
                         messageDetails.put("event", "connect");
+                        messageDetails.put("version", metadataMap.getOrDefault("ver", ""));
+                        messageDetails.put("userId", metadataMap.getOrDefault("userId", ""));
                         messageDetails.put("address", metadataMap.getOrDefault("address", ""));
+                        messageDetails.put("channelId", metadataMap.getOrDefault("channelId", ""));
                         messageDetails.put("keepAliveTimeSeconds", keepAliveTimeSeconds);
 
                         createMessageDetailsJson(clientConnected, messageDetails);
@@ -428,8 +431,11 @@ public final class BifromqEventCollectorPluginEventProvider implements IEventCol
 
                     Optional.of(pingReq.clientInfo().getMetadataMap())
                             .ifPresent(metadata -> {
-                                messageDetails.put("clientId", metadata.get("clientId"));
-                                messageDetails.put("address", metadata.get("address"));
+                                messageDetails.put("clientId", metadata.getOrDefault("clientId", ""));
+                                messageDetails.put("version", metadata.getOrDefault("ver", ""));
+                                messageDetails.put("userId", metadata.getOrDefault("userId", ""));
+                                messageDetails.put("address", metadata.getOrDefault("address", ""));
+                                messageDetails.put("channelId", metadata.getOrDefault("channelId", ""));
                             });
 
                     messageDetails.put("success", "success");
@@ -454,7 +460,7 @@ public final class BifromqEventCollectorPluginEventProvider implements IEventCol
             if (e != null) {
                 log.error("Error occurred while producing message to topic {}. Exception: ", recordMetadata.topic(), e);
             } else {
-                log.info("Message successfully sent to topic {}.", recordMetadata.topic());
+                log.info("Message successfully sent to topic {}, offset:{}.", recordMetadata.topic(), recordMetadata.offset());
             }
             log.info("topic:{},end", topic);
         });
