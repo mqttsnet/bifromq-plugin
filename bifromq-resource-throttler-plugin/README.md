@@ -35,11 +35,7 @@ mvn clean package
 
 ### 3. 部署和加载插件
 
-将插件包解压到 BifroMQ 插件目录（假设目录为 `/path/to/bifromq/plugins`）：
-
-```bash
-unzip target/bifromq-resource-throttler-provider-plugin.zip -d /path/to/bifromq/plugins/
-```
+将插件包上传到 BifroMQ 插件目录（假设目录为 `/home/bifromq/plugins`）：
 
 然后启动 BifroMQ 服务，插件将自动加载。
 
