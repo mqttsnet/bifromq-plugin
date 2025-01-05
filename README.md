@@ -53,7 +53,7 @@ BifroMQ Plugins
 
 ### 2. 插件版本
 
-当前支持插件版本为 **3.3.3**。你可以在插件的 `pom.xml` 文件中 bifromq.version 查看当前支持服务端版本。
+当前支持插件版本为 **3.3.4**。你可以在插件的 `pom.xml` 文件中 bifromq.version 查看当前支持服务端版本。
 
 ### 3. 构建插件
 
