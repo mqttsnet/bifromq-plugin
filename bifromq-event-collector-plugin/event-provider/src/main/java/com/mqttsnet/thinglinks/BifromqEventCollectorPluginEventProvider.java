@@ -13,6 +13,14 @@
 
 package com.mqttsnet.thinglinks;
 
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Properties;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+
 import cn.hutool.core.text.CharSequenceUtil;
 import com.baidu.bifromq.plugin.eventcollector.Event;
 import com.baidu.bifromq.plugin.eventcollector.EventType;
@@ -32,6 +40,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.protobuf.ByteString;
 import com.mqttsnet.thinglinks.config.EventCollectorConfig;
 import com.mqttsnet.thinglinks.config.PluginConfig;
+import com.mqttsnet.thinglinks.enumeration.EventTypeEnum;
 import com.mqttsnet.thinglinks.util.TaskQueue;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -39,10 +48,6 @@ import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.pf4j.Extension;
-
-import java.util.*;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 
 /**
  * -----------------------------------------------------------------------------
@@ -59,12 +64,13 @@ import java.util.function.Consumer;
  * -----------------------------------------------------------------------------
  *
  * @author xiaonannet
- * @version 1.0
+ * @version 1.1
  * -----------------------------------------------------------------------------
  * Revision History:
  * Date         Author          Version     Description
  * --------      --------     -------   --------------------
  * 2024/2/23       xiaonannet        1.0        Initial creation
+ * 2025/3/6        xiaonannet        1.1        Add event enumeration
  * -----------------------------------------------------------------------------
  * @email
  * @date 2024/2/23 15:36
@@ -203,7 +209,7 @@ public final class BifromqEventCollectorPluginEventProvider implements IEventCol
                         tenantIdOpt.ifPresent(tenantId -> messageDetails.put("tenantId", tenantId));
                         messageDetails.put("clientId", metadataMap.getOrDefault("clientId", ""));
                         messageDetails.put("success", "success");
-                        messageDetails.put("event", "connect");
+                        messageDetails.put("event", EventTypeEnum.CONNECT.getName());
                         messageDetails.put("version", metadataMap.getOrDefault("ver", ""));
                         messageDetails.put("userId", metadataMap.getOrDefault("userId", ""));
                         messageDetails.put("address", metadataMap.getOrDefault("address", ""));
@@ -236,7 +242,7 @@ public final class BifromqEventCollectorPluginEventProvider implements IEventCol
                                 .map(topics -> topics.get(0))
                                 .ifPresent(topic -> messageDetails.put("topic", topic));
                         messageDetails.put("success", "success");
-                        messageDetails.put("event", "SUBSCRIBE");
+                        messageDetails.put("event", EventTypeEnum.SUBSCRIBE.getName());
                         messageDetails.put("address", metadataMap.getOrDefault("address", ""));
 
                         createMessageDetailsJson(subAcked, messageDetails);
@@ -265,7 +271,7 @@ public final class BifromqEventCollectorPluginEventProvider implements IEventCol
                                 .map(topics -> topics.get(0))
                                 .ifPresent(topic -> messageDetails.put("topic", topic));
                         messageDetails.put("success", "success");
-                        messageDetails.put("event", "UNSUBSCRIBE");
+                        messageDetails.put("event", EventTypeEnum.UNSUBSCRIBE.getName());
                         messageDetails.put("address", metadataMap.getOrDefault("address", ""));
 
                         createMessageDetailsJson(unsubAcked, messageDetails);
@@ -306,7 +312,7 @@ public final class BifromqEventCollectorPluginEventProvider implements IEventCol
                                                                     messageDetails.put("messageId", messageId);
                                                                     messageDetails.put("qos", pubQoSValue);
                                                                     messageDetails.put("timestamp", timestamp);
-                                                                    messageDetails.put("event", "PUBLISH");
+                                                                    messageDetails.put("event", EventTypeEnum.PUBLISH.getName());
                                                                     messageDetails.put("time", timestamp);
                                                                     messageDetails.put("expiryInterval", expiryInterval);
                                                                     messageDetails.put("payload", payloadStr);
@@ -338,7 +344,7 @@ public final class BifromqEventCollectorPluginEventProvider implements IEventCol
                     Optional.ofNullable(distError.messages())
                             .ifPresent(messages -> messageDetails.put("message", messages.toString()));
                     messageDetails.put("success", "success");
-                    messageDetails.put("event", "error");
+                    messageDetails.put("event", EventTypeEnum.ERROR.getName());
                     messageDetails.put("reqId", distError.reqId());
                     messageDetails.put("code", distError.code());
 
@@ -364,7 +370,7 @@ public final class BifromqEventCollectorPluginEventProvider implements IEventCol
                             });
 
                     messageDetails.put("success", "success");
-                    messageDetails.put("event", "DISCONNECT");
+                    messageDetails.put("event", EventTypeEnum.DISCONNECT.getName());
 
                     createMessageDetailsJson(byClient, messageDetails);
                 });
@@ -388,7 +394,7 @@ public final class BifromqEventCollectorPluginEventProvider implements IEventCol
                             });
 
                     messageDetails.put("success", "success");
-                    messageDetails.put("event", "CLOSE");
+                    messageDetails.put("event", EventTypeEnum.CLOSE.getName());
 
                     createMessageDetailsJson(byServer, messageDetails);
                 });
@@ -412,7 +418,7 @@ public final class BifromqEventCollectorPluginEventProvider implements IEventCol
                             });
 
                     messageDetails.put("success", "success");
-                    messageDetails.put("event", "CLOSE");
+                    messageDetails.put("event", EventTypeEnum.CLOSE.getName());
 
                     createMessageDetailsJson(kicked, messageDetails);
                 });
@@ -439,7 +445,7 @@ public final class BifromqEventCollectorPluginEventProvider implements IEventCol
                             });
 
                     messageDetails.put("success", "success");
-                    messageDetails.put("event", "PING");
+                    messageDetails.put("event", EventTypeEnum.PING.getName());
 
                     createMessageDetailsJson(pingReq, messageDetails);
                 });
