@@ -4,7 +4,7 @@ import cn.hutool.core.bean.BeanUtil;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import com.mqttsnet.thinglinks.config.PluginConfig;
+import com.mqttsnet.thinglinks.entity.config.PluginConfig;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;

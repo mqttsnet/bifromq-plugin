@@ -13,23 +13,49 @@
 
 package com.mqttsnet.thinglinks;
 
-import cn.hutool.http.HttpResponse;
-import cn.hutool.http.HttpUtil;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
+
+import cn.hutool.core.util.StrUtil;
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.baidu.bifromq.plugin.authprovider.IAuthProvider;
-import com.baidu.bifromq.plugin.authprovider.type.*;
+import com.baidu.bifromq.plugin.authprovider.type.Failed;
+import com.baidu.bifromq.plugin.authprovider.type.MQTT3AuthData;
+import com.baidu.bifromq.plugin.authprovider.type.MQTT3AuthResult;
+import com.baidu.bifromq.plugin.authprovider.type.MQTT5AuthData;
+import com.baidu.bifromq.plugin.authprovider.type.MQTT5AuthResult;
+import com.baidu.bifromq.plugin.authprovider.type.MQTT5ExtendedAuthData;
+import com.baidu.bifromq.plugin.authprovider.type.MQTT5ExtendedAuthResult;
+import com.baidu.bifromq.plugin.authprovider.type.MQTTAction;
+import com.baidu.bifromq.plugin.authprovider.type.Ok;
+import com.baidu.bifromq.plugin.authprovider.type.Reject;
+import com.baidu.bifromq.plugin.authprovider.type.Success;
 import com.baidu.bifromq.type.ClientInfo;
-import com.mqttsnet.thinglinks.config.PluginConfig;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.mqttsnet.basic.model.cache.CacheKey;
+import com.mqttsnet.thinglinks.config.acl.AclCacheConfig;
+import com.mqttsnet.thinglinks.config.threadpool.ThreadPoolConfig;
+import com.mqttsnet.thinglinks.entity.acl.DeviceAclRule;
+import com.mqttsnet.thinglinks.entity.config.AuthProviderConfig;
+import com.mqttsnet.thinglinks.entity.config.PluginConfig;
+import com.mqttsnet.thinglinks.entity.enumeration.ClientAclActionTypeEnum;
+import com.mqttsnet.thinglinks.entity.enumeration.DeviceAclRuleActionTypeEnum;
+import com.mqttsnet.thinglinks.util.AclMatcherUtil;
+import com.mqttsnet.thinglinks.util.OkHttpUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.pf4j.Extension;
 import org.springframework.http.HttpStatus;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.*;
 
 /**
  * -----------------------------------------------------------------------------
@@ -55,17 +81,23 @@ import java.util.concurrent.*;
  * Revision History:
  * Date         Author          Version     Description
  * --------      --------     -------   --------------------
- * 2024/2/23       xiaonannet        1.0        Initial creation
+ * 2024/2/23       mqttsnet        1.0        Initial creation
+ * 2025/5/10       mqttsnet        1.0        ACL鉴权支持
  * -----------------------------------------------------------------------------
- * @email
+ * @email mqttsnet@163.com
  * @date 2024/2/23 15:36
  */
 @Slf4j
 @Extension
-public final class BifromqAuthProviderPluginAuthProvider implements IAuthProvider {
+public final class BifromqAuthProviderPluginAuthProvider implements IAuthProvider, AutoCloseable {
 
-    private final String clientConnectionUrl;
+    private final AtomicBoolean stopped = new AtomicBoolean();
     private final ThreadPoolExecutor executor;
+
+    private final AuthProviderConfig.AuthConfig authConfig;
+    private final AuthProviderConfig.AclConfig aclConfig;
+
+    private final Cache<CacheKey, Boolean> aclCache;
 
     /**
      * 构造函数，通过 {@link BifromqAuthProviderContext} 初始化配置。
@@ -73,19 +105,28 @@ public final class BifromqAuthProviderPluginAuthProvider implements IAuthProvide
      * @param context {@link BifromqAuthProviderContext} 认证插件的上下文，包含配置信息。
      */
     public BifromqAuthProviderPluginAuthProvider(BifromqAuthProviderContext context) {
-        PluginConfig pluginConfig = context.getPluginConfig();  // 通过 context 获取配置
-        this.clientConnectionUrl = pluginConfig.getAuthProviderConfig().getAuthConnectionUrl();
-        log.info("AuthProvider initialized with URL: {}", clientConnectionUrl);
+        // 通过 context 获取配置
+        PluginConfig pluginConfig = context.getPluginConfig();
+        AuthProviderConfig providerConfig = pluginConfig.getAuthProviderConfig();
 
-        int corePoolSize = Runtime.getRuntime().availableProcessors() * 10;
-        int maximumPoolSize = corePoolSize * 20;
-        long keepAliveTime = 60L;
-        TimeUnit unit = TimeUnit.SECONDS;
-        BlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>();
-        ThreadFactory threadFactory = Executors.defaultThreadFactory();
-        RejectedExecutionHandler handler = new ThreadPoolExecutor.AbortPolicy();
+        this.authConfig = providerConfig.getAuth();
+        this.aclConfig = providerConfig.getAcl();
 
-        this.executor = new ThreadPoolExecutor(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue, threadFactory, handler);
+        log.info("认证服务地址: {}", authConfig.getClientAuthUrl());
+        log.info("ACL 服务状态: {}", aclConfig.isEnabled() ? "已启用" : "已禁用");
+        log.info("AuthProvider Config: clientConnectionUrl={}, aclCheckUrl={}", authConfig.getClientAuthUrl(), aclConfig.getAclCheckUrl());
+
+        // 初始化线程池
+        this.executor = ThreadPoolConfig.newFixedExecutor(
+                "auth-worker",
+                Runtime.getRuntime().availableProcessors() * 10,
+                Runtime.getRuntime().availableProcessors() * 20,
+                1000
+        );
+
+        // 初始化ACL 缓存
+        this.aclCache = AclCacheConfig.buildCache(aclConfig.getCache(), executor);
+
     }
 
 
@@ -101,13 +142,16 @@ public final class BifromqAuthProviderPluginAuthProvider implements IAuthProvide
         String password = authData.getPassword().toStringUtf8();
         String username = authData.getUsername();
         String cert = authData.getCert().toStringUtf8();
+        String remoteAddr = authData.getRemoteAddr();
+        String channelId = authData.getChannelId();
         log.info("MQTT3 - Authenticating client - clientId: {}, username: {}, cert: {}", clientId, username, cert);
 
-        return CompletableFuture.supplyAsync(() -> clientConnectionAuthentication(clientId, password, username, cert), executor)
+        return CompletableFuture.supplyAsync(() -> clientConnectionAuthentication(clientId, password, username, cert, remoteAddr, channelId), executor)
                 .thenApply(this::handleMQTT3AuthenticationResponse);
     }
 
     /**
+     * l
      * MQTT5协议的认证方法，验证客户端连接请求。
      *
      * @param authData {@link MQTT5AuthData} 包含MQTT5认证数据
@@ -119,73 +163,97 @@ public final class BifromqAuthProviderPluginAuthProvider implements IAuthProvide
         String password = authData.getPassword().toStringUtf8();
         String username = authData.getUsername();
         String cert = authData.getCert().toStringUtf8();
+        String remoteAddr = authData.getRemoteAddr();
+        String channelId = authData.getChannelId();
         log.info("MQTT5 - Authenticating client - clientId: {}, username: {}, cert: {}", clientId, username, cert);
 
-        return CompletableFuture.supplyAsync(() -> clientConnectionAuthentication(clientId, password, username, cert), executor)
+        return CompletableFuture.supplyAsync(() -> clientConnectionAuthentication(clientId, password, username, cert, remoteAddr, channelId), executor)
                 .thenApply(this::handleMQTT5AuthenticationResponse);
     }
 
     /**
      * 通过向远程认证服务器发送POST请求执行客户端认证。
      *
-     * @param clientId 客户端ID
-     * @param password 客户端密码
-     * @param username 用户名
-     * @param cert     SSL证书信息
-     * @return {@link HttpResponse} 认证服务器的响应
+     * @param clientId   客户端ID
+     * @param password   客户端密码
+     * @param username   用户名
+     * @param cert       SSL证书信息
+     * @param remoteAddr 客户端远程地址
+     * @param channelId  通道ID
+     * @return {@link JSONObject} 认证服务器的响应
      */
-    private HttpResponse clientConnectionAuthentication(String clientId, String password, String username, String cert) {
-        JSONObject jsonObject = new JSONObject();
-        jsonObject.put("clientIdentifier", clientId);
-        jsonObject.put("password", password);
-        jsonObject.put("username", username);
-        jsonObject.put("protocolType", "MQTT");
+    private JSONObject clientConnectionAuthentication(String clientId, String password, String username, String cert, String remoteAddr, String channelId) {
+        try {
+            JSONObject jsonObject = new JSONObject();
+            jsonObject.put("clientIdentifier", clientId);
+            jsonObject.put("password", password);
+            jsonObject.put("username", username);
+            jsonObject.put("protocolType", "MQTT");
+            jsonObject.put("remoteAddr", remoteAddr);
+            jsonObject.put("channelId", channelId);
 
-        if (StringUtils.isNotBlank(cert)) {
-            jsonObject.put("authMode", 1);
-            jsonObject.put("clientCertificate", cert);
-        } else {
-            jsonObject.put("authMode", 0);
+            if (StringUtils.isNotBlank(cert)) {
+                jsonObject.put("authMode", 1);
+                jsonObject.put("clientCertificate", cert);
+            } else {
+                jsonObject.put("authMode", 0);
+            }
+
+            // 使用新工具类发送请求
+            Optional<JSONObject> response = OkHttpUtil.sendPostRequest(
+                    authConfig.getClientAuthUrl(),
+                    jsonObject.toJSONString(),
+                    null,
+                    JSON::parseObject
+            );
+
+            return response.orElse(null);
+        } catch (IOException e) {
+            log.error("HTTP request failed for client authentication: {}", clientId, e);
+            throw new CompletionException("HTTP request failed", e);
         }
-
-        return HttpUtil.createPost(clientConnectionUrl)
-                .body(jsonObject.toJSONString())
-                .execute();
     }
 
     /**
      * 处理MQTT3的认证响应，根据认证结果返回MQTT3的认证结果。
      *
-     * @param response {@link HttpResponse} 认证服务器的响应
+     * @param response {@link JSONObject} 认证服务器的响应
      * @return {@link MQTT3AuthResult} MQTT3认证结果
      */
-    private MQTT3AuthResult handleMQTT3AuthenticationResponse(HttpResponse response) {
-        int statusCode = response.getStatus();
-        String responseBody = response.body();
-        log.info("MQTT3 Authentication response - statusCode: {}, responseBody: {}", statusCode, responseBody);
+    private MQTT3AuthResult handleMQTT3AuthenticationResponse(JSONObject response) {
+        if (response == null) {
+            return createMQTT3RejectResponse("认证服务无响应");
+        }
 
-        if (statusCode == HttpStatus.OK.value()) {
-            return parseAuthResponseForMQTT3(responseBody);
+        boolean certificationResult = response.getBooleanValue("certificationResult", false);
+        log.info("MQTT3认证响应 - 认证结果: {}", certificationResult);
+
+        if (certificationResult) {
+            Ok.Builder okBuilder = buildOkResponse(response);
+            return MQTT3AuthResult.newBuilder().setOk(okBuilder.build()).build();
         } else {
-            return createMQTT3RejectResponse("Authentication failed with status: " + statusCode);
+            return createMQTT3RejectResponse("Authentication failed");
         }
     }
 
     /**
      * 处理MQTT5的认证响应，根据认证结果返回MQTT5的认证结果。
      *
-     * @param response {@link HttpResponse} 认证服务器的响应
+     * @param response {@link JSONObject} 认证服务器的响应
      * @return {@link MQTT5AuthResult} MQTT5认证结果
      */
-    private MQTT5AuthResult handleMQTT5AuthenticationResponse(HttpResponse response) {
-        int statusCode = response.getStatus();
-        String responseBody = response.body();
-        log.info("MQTT5 Authentication response - statusCode: {}, responseBody: {}", statusCode, responseBody);
+    private MQTT5AuthResult handleMQTT5AuthenticationResponse(JSONObject response) {
+        if (response == null) {
+            return createMQTT5RejectResponse("认证服务无响应");
+        }
 
-        if (statusCode == HttpStatus.OK.value()) {
-            return parseAuthResponseForMQTT5(responseBody);
+        boolean certificationResult = response.getBooleanValue("certificationResult", false);
+        log.info("MQTT5认证响应 - 认证结果: {}", certificationResult);
+
+        if (certificationResult) {
+            return parseAuthResponseForMQTT5(response);
         } else {
-            return createMQTT5RejectResponse("Authentication failed with status: " + statusCode);
+            return createMQTT5RejectResponse("Authentication failed");
         }
     }
 
@@ -197,7 +265,7 @@ public final class BifromqAuthProviderPluginAuthProvider implements IAuthProvide
      */
     private MQTT3AuthResult parseAuthResponseForMQTT3(String responseBody) {
         JSONObject responseJson = JSON.parseObject(responseBody);
-        boolean certificationResult = responseJson.getBoolean("certificationResult");
+        boolean certificationResult = responseJson.getBooleanValue("certificationResult", false);
 
         if (certificationResult) {
             Ok.Builder okBuilder = buildOkResponse(responseJson);
@@ -213,12 +281,11 @@ public final class BifromqAuthProviderPluginAuthProvider implements IAuthProvide
      * @param responseBody 认证响应的内容
      * @return {@link MQTT5AuthResult} MQTT5认证结果
      */
-    private MQTT5AuthResult parseAuthResponseForMQTT5(String responseBody) {
-        JSONObject responseJson = JSON.parseObject(responseBody);
-        boolean certificationResult = responseJson.getBoolean("certificationResult");
+    private MQTT5AuthResult parseAuthResponseForMQTT5(JSONObject responseBody) {
+        boolean certificationResult = responseBody.getBooleanValue("certificationResult", false);
 
         if (certificationResult) {
-            Ok.Builder okBuilder = buildOkResponse(responseJson);
+            Ok.Builder okBuilder = buildOkResponse(responseBody);
             // 创建 Success 构建器并填充属性
             Success.Builder successBuilder = Success.newBuilder()
                     .setTenantId(okBuilder.getTenantId())
@@ -244,10 +311,10 @@ public final class BifromqAuthProviderPluginAuthProvider implements IAuthProvide
         String clientId = deviceResultJson.flatMap(json -> Optional.ofNullable(json.getString("clientId"))).orElse("");
         String tenantId = Optional.ofNullable(responseJson.getString("tenantId")).orElse("");
 
-        // TODO 认证接口返回ACL 控制参数（ ACL 直接嵌入在令牌中。此信息将在发布/订阅期间用于访问控制。在当前工作流中，每个会话的 ClientInfo（在成功连接后填充）仅包含有限的保留元数据。）
+        //认证接口返回ACL 控制参数（ ACL 直接嵌入在令牌中。此信息将在发布/订阅期间用于访问控制。在当前工作流中，每个会话的 ClientInfo（在成功连接后填充）仅包含有限的保留元数据。）
         Map<String, String> attrsMap = new HashMap<>();
-        String aclData = Optional.ofNullable(responseJson.getString("acl")).orElse("");
-        if (!aclData.isEmpty()) {
+        String aclData = Optional.ofNullable(responseJson.getString("aclRuleResult")).orElse("");
+        if (StrUtil.isNotBlank(aclData)) {
             attrsMap.put("acl", aclData);
         }
 
@@ -386,94 +453,247 @@ public final class BifromqAuthProviderPluginAuthProvider implements IAuthProvide
     }
 
 
+    /**
+     * 执行客户端ACL权限检查
+     *
+     * @param client 客户端信息
+     * @param action 客户端操作
+     * @return 检查结果（true表示允许，false表示拒绝）
+     */
     @Override
     public CompletableFuture<Boolean> check(ClientInfo client, MQTTAction action) {
-//        return CompletableFuture.failedFuture(new UnsupportedOperationException("Unimplemented"));
-        return CompletableFuture.completedFuture(true);
+        // 如果配置文件中 ACL功能 未启用，直接放行
+        if (!aclConfig.isEnabled()) {
+            return CompletableFuture.completedFuture(true);
+        }
+        CacheKey cacheKey = buildAclCacheKey(client, action);
+        Boolean cachedResult = aclCache.getIfPresent(cacheKey);
+        if (cachedResult != null) {
+            log.info("ACL缓存命中 [key:{}] result:{}", cacheKey.getKey(), cachedResult);
+            return CompletableFuture.completedFuture(cachedResult);
+        }
+
+        return performAclCheck(client, action)
+                .thenApply(allowed -> allowed)
+                .whenComplete((allowed, ex) -> {
+                    if (ex == null) {
+                        try {
+                            // 仅在没有异常时更新缓存
+                            aclCache.put(cacheKey, allowed);
+                        } catch (Exception e) {
+                            log.error("Cache update failed for key: {}", cacheKey.getKey(), e);
+                        }
+                    }
+                })
+                .exceptionally(e -> {
+                    log.warn("ACL check failed for tenantId:{}", client.getTenantId(), e);
+                    return false;
+                });
     }
 
+
     /**
-     * 检查客户端的权限，根据操作类型（发布、订阅、退订）决定是否允许操作。
+     * 执行ACL权限检查的核心方法
+     * 处理两种ACL检查场景：
+     * 1. 优先检查客户端元数据中的ACL规则（快速路径）
+     * 2. 如果元数据中没有有效规则，则通过API接口检查（回退路径）
      *
-     * @param client 包含客户端信息的 {@link ClientInfo} 对象
-     * @param action 包含操作信息的 {@link MQTTAction} 对象
-     * @return {@link CompletableFuture<CheckResult>} 包含权限检查结果
+     * @param client 客户端信息，包含认证元数据
+     * @param action 客户端操作（PUB/SUB/UNSUB）
+     * @return {@link CompletableFuture<Boolean>} 异步返回鉴权结果
      */
-    @Override
-    public CompletableFuture<CheckResult> checkPermission(ClientInfo client, MQTTAction action) {
+    private CompletableFuture<Boolean> performAclCheck(ClientInfo client, MQTTAction action) {
         return CompletableFuture.supplyAsync(() -> {
-            String checkAction = null;
-            String topic = null;
+            // 步骤1：构建基础ACL检查请求参数
+            JSONObject aclRequest = buildAclRequest(client, action);
 
-            // 确定动作类型（发布、订阅、退订）并提取相应的主题
-            if (action.hasPub()) {
-                checkAction = "Pub";
-                topic = action.getPub().getTopic();
-            } else if (action.hasSub()) {
-                checkAction = "Sub";
-                topic = action.getSub().getTopicFilter();
-            } else if (action.hasUnsub()) {
-                checkAction = "Sub";
-                topic = action.getUnsub().getTopicFilter();
-            }
+            // 步骤2：优先检查客户端元数据中的ACL规则
+            Optional<Boolean> metadataCheckResult = checkAclFromClientMetadata(client, aclRequest);
 
-            // TODO 调用业务系统API查看是否有动作权限，目前是全部都允许
-
-            // 构建 HTTP POST 请求
-            /*HttpPost post = new HttpPost(ConfigUtils.getAuthProviderConfig().getDevice().getCheckUrl());
-            StringEntity entity = new StringEntity(String.format("{\"username\":\"%s\",\"topic\":\"%s\", \"action\": \"%s\"}",
-                    client.getUserId(), topic, checkAction), "UTF-8");
-            post.setEntity(entity);
-            post.setHeader("Content-Type", "application/json");
-
-            try (CloseableHttpResponse response = httpClient.execute(post)) {
-                if (parseAuthResult(response.getEntity())) {
-                    // 权限检查通过
-                    return CheckResult.newBuilder().setOk(Ok.newBuilder().build()).build();
-                } else {
-                    // 权限检查未通过
-                    return createRejectCheckResult("Permission denied");
-                }
-            } catch (Exception e) {
-                log.warn("Failed to check permission for user: {}, action: {}, topic: {}", client.getUserId(), checkAction, topic, e);
-                // 返回错误结果
-                return createRejectCheckResult("Error during permission check");
-            }*/
-
-            // 默认放行
-            return CheckResult.newBuilder().setGranted(Granted.getDefaultInstance()).build();
-        });
+            // 步骤3：如果元数据检查有明确结果则直接返回，否则回退到API检查
+            return metadataCheckResult.orElseGet(() -> checkAclViaHttpApi(aclRequest));
+        }, executor);
     }
 
     /**
-     * 解析权限检查结果。
+     * 从客户端元数据中检查ACL权限
      *
-     * @param entity HTTP 响应实体
-     * @return 如果解析成功且权限通过返回 true，否则返回 false
+     * @param client     包含认证元数据的客户端信息
+     * @param aclRequest 已构建的ACL请求参数
+     * @return Optional<Boolean>
+     * - 包含true/false表示元数据中有有效规则时的鉴权结果
+     * - empty表示元数据中没有有效规则需要走API检查
      */
-    /*private boolean parseAuthResult(HttpEntity entity) {
-        // 示例解析逻辑，可以根据实际返回结果实现
-        // 假设响应体为 JSON 格式 {"allowed": true/false}
-        try (InputStream is = entity.getContent()) {
-            JSONObject jsonResponse = JSON.parseObject(is, StandardCharsets.UTF_8, JSONObject.class);
-            return jsonResponse.getBooleanValue("allowed");
-        } catch (IOException e) {
-            log.warn("Failed to parse auth result", e);
+    private Optional<Boolean> checkAclFromClientMetadata(ClientInfo client, JSONObject aclRequest) {
+        // 步骤1：从元数据中提取ACL规则字符串
+        return Optional.ofNullable(client.getMetadataMap().get("acl"))
+                // 过滤空值
+                .filter(StrUtil::isNotBlank)
+                // 转换为ACL规则对象列表
+                .map(acl -> JSONArray.parseArray(acl, DeviceAclRule.class))
+                // 过滤空规则列表
+                .filter(rules -> !rules.isEmpty())
+                // 执行规则匹配
+                .flatMap(rules -> {
+                    // 步骤2：解析动作类型
+                    Optional<ClientAclActionTypeEnum> actionType = Optional.ofNullable(aclRequest.getInteger("actionType"))
+                            .flatMap(ClientAclActionTypeEnum::fromValue);
+
+                    // 步骤3：转换为规则动作类型
+                    Optional<DeviceAclRuleActionTypeEnum> ruleActionType = actionType
+                            .flatMap(DeviceAclRuleActionTypeEnum::fromClientType);
+
+                    // 无效动作类型直接返回空
+                    if (ruleActionType.isEmpty()) {
+                        return Optional.empty();
+                    }
+
+                    // 步骤4：过滤出适用的规则
+                    List<DeviceAclRule> filteredRules = rules.stream()
+                            .filter(DeviceAclRule::getEnabled)
+                            .filter(rule ->
+                                    rule.getActionType().equals(ruleActionType.get().getValue()) ||
+                                            rule.getActionType().equals(DeviceAclRuleActionTypeEnum.ALL.getValue())
+                            )
+                            .collect(Collectors.toList());
+
+                    // 步骤5：如果没有适用的规则，返回empty回退到API检查
+                    if (filteredRules.isEmpty()) {
+                        return Optional.empty();
+                    }
+
+                    // 步骤6：执行主题匹配
+                    return Optional.of(AclMatcherUtil.isTopicAllowed(
+                            aclRequest.getString("topic"),
+                            filteredRules
+                    ));
+                });
+    }
+
+    /**
+     * 通过HTTP API检查ACL权限（回退路径）
+     *
+     * @param aclRequest 完整的ACL检查请求参数
+     * @return boolean
+     * - true: 允许访问
+     * - false: 拒绝访问或检查失败
+     */
+    private boolean checkAclViaHttpApi(JSONObject aclRequest) {
+        try {
+            // 发送HTTP POST请求到ACL检查接口
+            int statusCode = OkHttpUtil.sendPostRequestForStatus(
+                    aclConfig.getAclCheckUrl(),
+                    aclRequest.toJSONString(),
+                    null
+            );
+
+            log.debug("ACL API检查完成 - 状态码: {}, 请求参数: {}", statusCode, aclRequest);
+
+            // HTTP 200表示允许访问
+            return statusCode == HttpStatus.OK.value();
+        } catch (Exception e) {
+            log.error("ACL API检查失败 - 请求参数: {}, 错误信息: {}", aclRequest, e.getMessage());
+            // 接口调用失败时默认拒绝访问
             return false;
         }
-    }*/
+    }
+
 
     /**
-     * 创建拒绝的 {@link CheckResult} 对象。
+     * 构建ACL检查请求参数
      *
-     * @param reason 拒绝的原因
-     * @return {@link CheckResult} 包含拒绝信息
+     * @param client 客户端信息
+     * @param action 客户端操作
+     * @return 包含所有请求参数的JSON对象
      */
-    /*private CheckResult createRejectCheckResult(String reason) {
-        return CheckResult.newBuilder()
-                .setError(Error.newBuilder()
-                        .setReason(reason)
-                        .build())
-                .build();
-    }*/
+    private JSONObject buildAclRequest(ClientInfo client, MQTTAction action) {
+        JSONObject aclRequest = new JSONObject();
+
+        // 添加基础信息
+        aclRequest.put("tenantId", client.getTenantId());
+        aclRequest.put("protocolType", client.getType());
+
+        // 安全处理 metadataMap
+        Optional.of(client.getMetadataMap())
+                .ifPresent(metadataMap -> {
+                    aclRequest.put("clientIdentifier", metadataMap.getOrDefault("clientId", ""));
+                    aclRequest.put("userId", metadataMap.getOrDefault("userId", ""));
+                    aclRequest.put("channelId", metadataMap.getOrDefault("channelId", ""));
+                    aclRequest.put("broker", metadataMap.getOrDefault("broker", ""));
+                    aclRequest.put("remoteAddr", metadataMap.getOrDefault("address", ""));
+                });
+
+        // 添加操作相关参数
+        aclRequest.put("actionType", resolveActionType(action));
+        aclRequest.put("topic", resolveActionTopic(action));
+
+        return aclRequest;
+    }
+
+    /**
+     * 解析操作类型
+     *
+     * @param action 客户端操作
+     * @return 对应的操作类型枚举值（可能为null）
+     */
+    private Integer resolveActionType(MQTTAction action) {
+        return Optional.of(action)
+                .map(a -> {
+                    if (a.hasPub()) return ClientAclActionTypeEnum.PUBLISH.getValue();
+                    if (a.hasSub()) return ClientAclActionTypeEnum.SUBSCRIBE.getValue();
+                    if (a.hasUnsub()) return ClientAclActionTypeEnum.UNSUBSCRIBE.getValue();
+                    return ClientAclActionTypeEnum.UNKNOWN.getValue();
+                })
+                .orElse(null);
+    }
+
+    /**
+     * 解析操作主题
+     *
+     * @param action 客户端操作
+     * @return 对应的主题字符串（空字符串表示无主题）
+     */
+    private String resolveActionTopic(MQTTAction action) {
+        return Optional.of(action)
+                .map(a -> {
+                    if (a.hasPub()) return a.getPub().getTopic();
+                    if (a.hasSub()) return a.getSub().getTopicFilter();
+                    if (a.hasUnsub()) return a.getUnsub().getTopicFilter();
+                    return "";
+                })
+                .orElse("");
+    }
+
+
+    private CacheKey buildAclCacheKey(ClientInfo client, MQTTAction action) {
+        String clientId = client.getMetadataMap().get("clientId");
+        String topic = resolveActionTopic(action);
+        String normalizedTopic = topic.replaceAll("/+", "/");
+
+        // 使用组合键：clientId + actionType + normalizedTopic
+        String cacheKeyStr = String.format("%s|%s|%s", clientId, action.getTypeCase().name(), normalizedTopic);
+        return new CacheKey(cacheKeyStr);
+    }
+
+    /**
+     * 失效指定channel的缓存
+     */
+    public void invalidateAclCache(String clientId) {
+        if (aclCache != null) {
+            long count = aclCache.asMap().keySet().stream()
+                    .filter(key -> key.getKey().startsWith(clientId + "|"))
+                    .peek(aclCache::invalidate)
+                    .count();
+            log.debug("已失效clientId:[{}]...{}条Acl缓存", clientId, count);
+        }
+    }
+
+
+    @Override
+    public void close() {
+        if (stopped.compareAndSet(false, true)) {
+            log.info("Closing auth provider manager");
+        }
+    }
+
 }

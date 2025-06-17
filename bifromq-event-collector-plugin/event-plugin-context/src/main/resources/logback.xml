@@ -7,9 +7,11 @@
 
     <appender name="stdoutFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${logDir}/plugin/BifromqEventCollectorPlugin/stdout.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
             <fileNamePattern>${logDir}/plugin/BifromqEventCollectorPlugin/stdout.%d{yyyy-MM-dd_HH}.log</fileNamePattern>
-            <maxHistory>7</maxHistory>
+            <maxHistory>60</maxHistory>
+            <maxFileSize>2048MB</maxFileSize>
+            <totalSizeCap>100GB</totalSizeCap>
         </rollingPolicy>
         <encoder>
             <pattern>${logPattern}</pattern>
@@ -23,9 +25,11 @@
 
     <appender name="traceLogFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${logDir}/plugin/BifromqEventCollectorPlugin/trace.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
             <fileNamePattern>${logDir}/plugin/BifromqEventCollectorPlugin/trace.%d{yyyy-MM-dd_HH}.log</fileNamePattern>
-            <maxHistory>7</maxHistory>
+            <maxHistory>60</maxHistory>
+            <maxFileSize>2048MB</maxFileSize>
+            <totalSizeCap>100GB</totalSizeCap>
         </rollingPolicy>
         <encoder>
             <pattern>${logPattern}</pattern>
@@ -39,9 +43,11 @@
 
     <appender name="debugLogFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${logDir}/plugin/BifromqEventCollectorPlugin/debug.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
             <fileNamePattern>${logDir}/plugin/BifromqEventCollectorPlugin/debug.%d{yyyy-MM-dd_HH}.log</fileNamePattern>
-            <maxHistory>7</maxHistory>
+            <maxHistory>60</maxHistory>
+            <maxFileSize>2048MB</maxFileSize>
+            <totalSizeCap>100GB</totalSizeCap>
         </rollingPolicy>
         <encoder>
             <pattern>${logPattern}</pattern>
@@ -55,9 +61,11 @@
 
     <appender name="infoLogFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${logDir}/plugin/BifromqEventCollectorPlugin/info.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
             <fileNamePattern>${logDir}/plugin/BifromqEventCollectorPlugin/info.%d{yyyy-MM-dd_HH}.log</fileNamePattern>
-            <maxHistory>7</maxHistory>
+            <maxHistory>60</maxHistory>
+            <maxFileSize>2048MB</maxFileSize>
+            <totalSizeCap>100GB</totalSizeCap>
         </rollingPolicy>
         <encoder>
             <pattern>${logPattern}</pattern>
@@ -71,9 +79,11 @@
 
     <appender name="warnLogFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${logDir}/plugin/BifromqEventCollectorPlugin/warn.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
             <fileNamePattern>${logDir}/plugin/BifromqEventCollectorPlugin/trace.%d{yyyy-MM-dd_HH}.log</fileNamePattern>
-            <maxHistory>7</maxHistory>
+            <maxHistory>60</maxHistory>
+            <maxFileSize>2048MB</maxFileSize>
+            <totalSizeCap>100GB</totalSizeCap>
         </rollingPolicy>
         <encoder>
             <pattern>${logPattern}</pattern>
@@ -87,9 +97,11 @@
 
     <appender name="errorLogFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${logDir}/plugin/BifromqEventCollectorPlugin/error.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
             <fileNamePattern>${logDir}/plugin/BifromqEventCollectorPlugin/error.%d{yyyy-MM-dd_HH}.log</fileNamePattern>
-            <maxHistory>7</maxHistory>
+            <maxHistory>60</maxHistory>
+            <maxFileSize>2048MB</maxFileSize>
+            <totalSizeCap>100GB</totalSizeCap>
         </rollingPolicy>
         <encoder>
             <pattern>${logPattern}</pattern>
