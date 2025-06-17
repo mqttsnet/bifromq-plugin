@@ -18,9 +18,13 @@
 
     <properties>
         <bifromq.version>3.3.5</bifromq.version>
+        <thinglinks-util.version>1.0.2</thinglinks-util.version>
         <pf4j.version>3.10.0</pf4j.version>
         <slf4j.version>1.7.30</slf4j.version>
         <logback.version>1.2.13</logback.version>
+        <okio.version>3.12.0</okio.version>
+        <okhttp3.version>4.12.0</okhttp3.version>
+        <caffeine.version>2.9.3</caffeine.version>
 
         <!-- plugin version -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -103,6 +107,12 @@
                 <scope>provided</scope>
             </dependency>
 
+            <dependency>
+                <groupId>com.mqttsnet.basic</groupId>
+                <artifactId>thinglinks-core</artifactId>
+                <version>${thinglinks-util.version}</version>
+            </dependency>
+
             <!--     业务依赖Start (非框架必须依赖，自行管理其版本)       -->
 
             <!-- https://mvnrepository.com/artifact/org.projectlombok/lombok -->
@@ -111,6 +121,12 @@
                 <artifactId>lombok</artifactId>
                 <version>1.18.34</version>
                 <scope>provided</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>com.github.ben-manes.caffeine</groupId>
+                <artifactId>caffeine</artifactId>
+                <version>${caffeine.version}</version>
             </dependency>
 
 
@@ -161,6 +177,45 @@
                 <groupId>org.slf4j</groupId>
                 <artifactId>slf4j-api</artifactId>
                 <version>2.0.16</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.squareup.okio/okio -->
+            <dependency>
+                <groupId>com.squareup.okio</groupId>
+                <artifactId>okio</artifactId>
+                <version>${okio.version}</version>
+            </dependency>
+            <!-- https://mvnrepository.com/artifact/com.squareup.okhttp3/okhttp -->
+            <dependency>
+                <groupId>com.squareup.okhttp3</groupId>
+                <artifactId>okhttp</artifactId>
+                <version>${okhttp3.version}</version>
+            </dependency>
+            <!-- https://mvnrepository.com/artifact/com.squareup.okhttp3/logging-interceptor -->
+            <dependency>
+                <groupId>com.squareup.okhttp3</groupId>
+                <artifactId>logging-interceptor</artifactId>
+                <version>${okhttp3.version}</version>
+            </dependency>
+
+            <!-- JMH 核心依赖 -->
+            <dependency>
+                <groupId>org.openjdk.jmh</groupId>
+                <artifactId>jmh-core</artifactId>
+                <version>1.37</version>
+            </dependency>
+            <dependency>
+                <groupId>org.openjdk.jmh</groupId>
+                <artifactId>jmh-generator-annprocess</artifactId>
+                <version>1.37</version>
+                <scope>provided</scope>
+            </dependency>
+
+            <!-- 异步分析工具 -->
+            <dependency>
+                <groupId>com.github.oshi</groupId>
+                <artifactId>oshi-core</artifactId>
+                <version>6.8.2</version>
             </dependency>
 
 

@@ -1,4 +1,21 @@
+# 认证服务配置
 authProviderConfig:
-  # The URL of the authentication provider service
-#  authConnectionUrl: https://pro-test-gateway.thinglinks.mqttsnet.com/api/link/deviceOpen/anyTenant/clientConnectionAuthentication
-  authConnectionUrl: http://127.0.0.1:19100/link/deviceOpenAny/clientConnectionAuthentication
+  # 认证服务配置
+  auth:
+    # 基础服务地址（填写ThingLinks网关地址）,baseUrl+clientAuthEndpoint 为完整访问路径，请保证必须正确
+    baseUrl: http://127.0.0.1:19100
+    # 客户端连接认证接口
+    clientAuthEndpoint: /link/deviceOpenAny/clientConnectionAuthentication
+  # ACL 服务配置
+  acl:
+    # 是否启用 ACL 检查
+    enabled: false
+    # 基础服务地址（填写ThingLinks网关地址）
+    baseUrl: http://127.0.0.1:19100
+    # ACL校验接口
+    aclCheckEndpoint: /link/deviceOpenAny/clientAclValidation
+    cache:
+      maxSize: 1000000         # 100万最大容量
+      expireMinutes: 10       # 10分钟过期
+      refreshAfterWrite: 2    # 2分钟后后台刷新(时间≤过期时间)
+      recordStats: true       # 开启统计

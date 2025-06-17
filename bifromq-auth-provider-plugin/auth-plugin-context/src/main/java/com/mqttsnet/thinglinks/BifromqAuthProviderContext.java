@@ -3,7 +3,7 @@ package com.mqttsnet.thinglinks;
 import cn.hutool.json.JSONUtil;
 import com.baidu.bifromq.plugin.BifroMQPluginContext;
 import com.baidu.bifromq.plugin.BifroMQPluginDescriptor;
-import com.mqttsnet.thinglinks.config.PluginConfig;
+import com.mqttsnet.thinglinks.entity.config.PluginConfig;
 import com.mqttsnet.thinglinks.util.ConfigUtil;
 import lombok.extern.slf4j.Slf4j;
 
