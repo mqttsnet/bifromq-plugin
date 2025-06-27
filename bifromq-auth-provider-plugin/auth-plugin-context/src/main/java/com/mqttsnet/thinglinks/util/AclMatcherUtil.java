@@ -4,8 +4,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executor;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
@@ -39,13 +39,21 @@ public class AclMatcherUtil {
     private static final String SYSTEM_TOPIC_PREFIX = StrPool.DOLLAR;
     private static final String TOPIC_SEPARATOR = StrPool.SLASH;
 
+    private static final Pattern MULTI_LEVEL_PATTERN = Pattern.compile("^.*$");
+    private static final Pattern SYSTEM_TOPIC_PATTERN = Pattern.compile("^\\$[^/]+(?:/[^/]+)*$");
+    private static final Pattern NEVER_MATCH_PATTERN = Pattern.compile("a^");
+
+
     private static final Executor PATTERN_COMPILATION_EXECUTOR =
             new ThreadPoolExecutor(
+                    Runtime.getRuntime().availableProcessors(),
                     Runtime.getRuntime().availableProcessors() * 2,
-                    Runtime.getRuntime().availableProcessors() * 4,
                     60, TimeUnit.SECONDS,
-                    new LinkedBlockingQueue<>(10_000),
-                    new ThreadFactoryBuilder().setNameFormat("pattern-compile-%d").build(),
+                    new ArrayBlockingQueue<>(100_000),
+                    new ThreadFactoryBuilder()
+                            .setNameFormat("acl-pattern-compile-%d")
+                            .setDaemon(true)
+                            .build(),
                     new ThreadPoolExecutor.CallerRunsPolicy()
             );
     private static final AsyncLoadingCache<String, Pattern> PATTERN_CACHE = Caffeine.newBuilder()
@@ -146,11 +154,19 @@ public class AclMatcherUtil {
 
     private static Pattern loadPattern(String pattern) {
         try {
+            if (MULTI_LEVEL_WILDCARD.equals(pattern)) {
+                return MULTI_LEVEL_PATTERN;
+            }
+            if (pattern.startsWith(SYSTEM_TOPIC_PREFIX)) {
+                return SYSTEM_TOPIC_PATTERN.matcher(pattern).matches() ?
+                        Pattern.compile(Pattern.quote(pattern)) :
+                        NEVER_MATCH_PATTERN;
+            }
             return compilePattern(pattern);
         } catch (Exception e) {
             log.error("Pattern compilation failed: {}", pattern, e);
             // 返回一个永远不会匹配的模式
-            return Pattern.compile("a^");
+            return NEVER_MATCH_PATTERN;
         }
     }
 

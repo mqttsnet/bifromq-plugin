@@ -3,11 +3,13 @@ package com.mqttsnet.thinglinks.util;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -53,7 +55,20 @@ public class AclMatcherOptimizedBenchmarkTest {
     @Setup(Level.Trial)
     public void initTestData() {
         random = new Random();
-        executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+        // 核心线程数=CPU核心数，最大线程数=2*CPU核心数
+        int corePoolSize = Runtime.getRuntime().availableProcessors();
+        int maxPoolSize = corePoolSize * 2;
+        executor = new ThreadPoolExecutor(
+                corePoolSize,
+                maxPoolSize,
+                60L, TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(1000),
+                new ThreadFactoryBuilder()
+                        .setNameFormat("acl-matcher-pool-%d")
+                        .setDaemon(true)
+                        .build(),
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
         patternTopicPairs = generatePatternTopicPairs(10_000);
         System.out.println("Test data initialized: " + patternTopicPairs.size() + " pattern-topic pairs");
     }
@@ -82,7 +97,9 @@ public class AclMatcherOptimizedBenchmarkTest {
 
         // 统计
         totalRequests.incrementAndGet();
-        if (result) matchedCount.incrementAndGet();
+        if (result) {
+            matchedCount.incrementAndGet();
+        }
 
         // 模拟缓存命中统计（实际需要修改AclMatcherUtil添加统计接口）
         if (duration < 100_000) { // <0.1ms 视为缓存命中
@@ -106,9 +123,15 @@ public class AclMatcherOptimizedBenchmarkTest {
 
     private String generatePattern() {
         int type = random.nextInt(100);
-        if (type < 5) return "$SYS/monitor/" + random.nextInt(20) + "/stats";
-        if (type < 20) return "city/" + random.nextInt(50) + "/#";
-        if (type < 50) return "building/" + random.nextInt(100) + "/+/status";
+        if (type < 5) {
+            return "$SYS/monitor/" + random.nextInt(20) + "/stats";
+        }
+        if (type < 20) {
+            return "city/" + random.nextInt(50) + "/#";
+        }
+        if (type < 50) {
+            return "building/" + random.nextInt(100) + "/+/status";
+        }
         return "device/" + random.nextInt(10000) + "/sensor/" + random.nextInt(100);
     }
 
