@@ -1,79 +1,89 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<configuration scan="true" scanPeriod="5 seconds">
-    
-    <property name="logDir" value="${LOG_DIR:-${user.dir}}"/>
+<configuration scan="true" scanPeriod="30 seconds">
+
+    <!-- 动态参数配置 -->
+    <property name="pluginId" value="${pluginId:-UNKNOWN_PLUGIN}"/>
+    <property name="logDir" value="${LOG_DIR:-/var/log/bifromq/plugins}"/>
     <property name="logPattern"
-              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %5p ${PID:- } [%t] --- %-40.40logger{39}[%F:%L] %m%n"/>
-    
-    <appender name="stdoutFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${logDir}/plugin/BifromqResourceThrottlerPlugin/stdout.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>${logDir}/plugin/BifromqResourceThrottlerPlugin/stdout.%d{yyyy-MM-dd_HH}.log</fileNamePattern>
-            <maxHistory>7</maxHistory>
-        </rollingPolicy>
-        <encoder>
-            <pattern>${logPattern}</pattern>
-        </encoder>
-        <filter class="ch.qos.logback.classic.filter.LevelFilter">
-            <level>INFO</level>
-            <onMatch>ACCEPT</onMatch>
-            <onMismatch>DENY</onMismatch>
-        </filter>
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} | %-5p | ${HOSTNAME:-NA} | ${PID:-NA} | [%t] | %-40logger{40} [%F:%L] | %m%n%ex{full}"/>
+
+    <!-- 异步日志队列参数 -->
+    <property name="asyncQueueSize" value="8192"/>
+    <property name="asyncDiscardThreshold" value="0"/> <!-- 0表示不丢弃日志 -->
+
+    <!-- 1. TRACE 级别日志 (异步) -->
+    <appender name="ASYNC_TRACE" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>${asyncQueueSize}</queueSize>
+        <discardingThreshold>${asyncDiscardThreshold}</discardingThreshold>
+        <appender-ref ref="TRACE_FILE"/>
     </appender>
 
-    <appender name="traceLogFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${logDir}/plugin/BifromqResourceThrottlerPlugin/trace.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>${logDir}/plugin/BifromqResourceThrottlerPlugin/trace.%d{yyyy-MM-dd_HH}.log</fileNamePattern>
-            <maxHistory>7</maxHistory>
+    <appender name="TRACE_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${logDir}/${pluginId}/trace.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${logDir}/${pluginId}/trace.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxHistory>60</maxHistory> <!-- 等保要求最低60天 -->
+            <maxFileSize>1GB</maxFileSize>
+            <totalSizeCap>100GB</totalSizeCap>
         </rollingPolicy>
         <encoder>
             <pattern>${logPattern}</pattern>
         </encoder>
-        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
             <level>TRACE</level>
-            <onMatch>ACCEPT</onMatch>
-            <onMismatch>DENY</onMismatch>
         </filter>
     </appender>
 
-    <appender name="debugLogFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${logDir}/plugin/BifromqResourceThrottlerPlugin/debug.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>${logDir}/plugin/BifromqResourceThrottlerPlugin/debug.%d{yyyy-MM-dd_HH}.log</fileNamePattern>
-            <maxHistory>7</maxHistory>
+    <!-- 2. DEBUG 级别日志 (异步) -->
+    <appender name="ASYNC_DEBUG" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>${asyncQueueSize}</queueSize>
+        <appender-ref ref="DEBUG_FILE"/>
+    </appender>
+
+    <appender name="DEBUG_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${logDir}/${pluginId}/debug.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${logDir}/${pluginId}/debug.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxHistory>60</maxHistory>
+            <maxFileSize>2GB</maxFileSize>
+            <totalSizeCap>200GB</totalSizeCap>
         </rollingPolicy>
         <encoder>
             <pattern>${logPattern}</pattern>
         </encoder>
-        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
             <level>DEBUG</level>
-            <onMatch>ACCEPT</onMatch>
-            <onMismatch>DENY</onMismatch>
         </filter>
     </appender>
 
-    <appender name="infoLogFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${logDir}/plugin/BifromqResourceThrottlerPlugin/info.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>${logDir}/plugin/BifromqResourceThrottlerPlugin/info.%d{yyyy-MM-dd_HH}.log</fileNamePattern>
-            <maxHistory>7</maxHistory>
+    <!-- 3. INFO 级别日志 (异步) -->
+    <appender name="ASYNC_INFO" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>${asyncQueueSize}</queueSize>
+        <appender-ref ref="INFO_FILE"/>
+    </appender>
+
+    <appender name="INFO_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${logDir}/${pluginId}/info.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${logDir}/${pluginId}/info.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxHistory>180</maxHistory> <!-- 业务日志保留半年 -->
+            <maxFileSize>5GB</maxFileSize>
+            <totalSizeCap>500GB</totalSizeCap>
         </rollingPolicy>
         <encoder>
             <pattern>${logPattern}</pattern>
         </encoder>
-        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
             <level>INFO</level>
-            <onMatch>ACCEPT</onMatch>
-            <onMismatch>DENY</onMismatch>
         </filter>
     </appender>
 
-    <appender name="warnLogFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${logDir}/plugin/BifromqResourceThrottlerPlugin/warn.log</file>
+    <!-- 4. WARN 级别日志 (同步) -->
+    <appender name="WARN_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${logDir}/${pluginId}/warn.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>${logDir}/plugin/BifromqResourceThrottlerPlugin/trace.%d{yyyy-MM-dd_HH}.log</fileNamePattern>
-            <maxHistory>7</maxHistory>
+            <fileNamePattern>${logDir}/${pluginId}/warn.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>365</maxHistory> <!-- 警告日志保留1年 -->
         </rollingPolicy>
         <encoder>
             <pattern>${logPattern}</pattern>
@@ -85,11 +95,12 @@
         </filter>
     </appender>
 
-    <appender name="errorLogFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${logDir}/plugin/BifromqResourceThrottlerPlugin/error.log</file>
+    <!-- 5. ERROR 级别日志 (同步+告警触发) -->
+    <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${logDir}/${pluginId}/error.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>${logDir}/plugin/BifromqResourceThrottlerPlugin/error.%d{yyyy-MM-dd_HH}.log</fileNamePattern>
-            <maxHistory>7</maxHistory>
+            <fileNamePattern>${logDir}/${pluginId}/error.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>365</maxHistory>
         </rollingPolicy>
         <encoder>
             <pattern>${logPattern}</pattern>
@@ -101,15 +112,42 @@
         </filter>
     </appender>
 
-    <logger name="com.mqttsnet.thinglinks" level="INFO" additivity="false">
-        <appender-ref ref="traceLogFile"/>
-        <appender-ref ref="debugLogFile"/>
-        <appender-ref ref="infoLogFile"/>
-        <appender-ref ref="warnLogFile"/>
-        <appender-ref ref="errorLogFile"/>
+    <!-- 6. 安全审计日志 (异步+严格保留) -->
+    <appender name="ASYNC_AUDIT" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>1024</queueSize>
+        <appender-ref ref="AUDIT_FILE"/>
+    </appender>
+
+    <appender name="AUDIT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${logDir}/${pluginId}/audit.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${logDir}/${pluginId}/audit.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>730</maxHistory> <!-- 审计日志保留2年 -->
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} | AUDIT | ${HOSTNAME} | ${pluginId} | %m%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- 日志分级控制 -->
+    <logger name="com.baidu.bifromq" level="WARN" additivity="false"/>
+    <logger name="org.pf4j" level="WARN" additivity="false"/>
+
+    <!-- 主业务日志 -->
+    <logger name="com.mqttsnet.thinglinks" level="INFO">
+        <appender-ref ref="ASYNC_TRACE"/>
+        <appender-ref ref="ASYNC_DEBUG"/>
+        <appender-ref ref="ASYNC_INFO"/>
+        <appender-ref ref="WARN_FILE"/>
+        <appender-ref ref="ERROR_FILE"/>
     </logger>
 
-    <root level="INFO">
-        <appender-ref ref="stdoutFile"/>
+    <!-- 安全审计日志 -->
+    <logger name="com.mqttsnet.thinglinks.audit" level="INFO" additivity="false">
+        <appender-ref ref="ASYNC_AUDIT"/>
+    </logger>
+
+    <root level="WARN">
+        <appender-ref ref="INFO_FILE"/>
     </root>
 </configuration>
