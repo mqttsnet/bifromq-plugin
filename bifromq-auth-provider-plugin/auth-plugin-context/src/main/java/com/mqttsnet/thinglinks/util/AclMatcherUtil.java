@@ -27,7 +27,7 @@ import lombok.extern.slf4j.Slf4j;
  * <p>提供高效的主题匹配功能，支持 MQTT 通配符（+ 和 #）。</p>
  *
  * @author mqttsnet
- * @version 1.0.0
+ * @version 1.0.4
  * @since 2025/6/14
  */
 @Slf4j
@@ -67,7 +67,7 @@ public class AclMatcherUtil {
 
 
     /**
-     * 检查主题是否被允许访问
+     * 检查主题是否被允许访问 （默认拒绝）
      *
      * @param topic 待检查的MQTT主题
      * @param rules ACL规则列表（需按优先级排序）
@@ -80,7 +80,7 @@ public class AclMatcherUtil {
                         .filter(CollUtil::isNotEmpty)
                         .flatMap(r -> findMatchingRule(t, r)))
                 .map(DeviceAclRule::getDecision)
-                .orElse(true);
+                .orElse(false);
     }
 
     /**

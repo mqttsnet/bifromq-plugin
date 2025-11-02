@@ -14,7 +14,7 @@ import lombok.extern.slf4j.Slf4j;
  * ACL 缓存配置
  *
  * @author Sun ShiHuan
- * @version 1.0.0
+ * @version 1.0.4
  * @since 2025/6/17
  */
 @Slf4j

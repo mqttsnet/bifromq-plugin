@@ -45,12 +45,15 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.mqttsnet.basic.model.cache.CacheKey;
 import com.mqttsnet.thinglinks.config.acl.AclCacheConfig;
 import com.mqttsnet.thinglinks.config.threadpool.ThreadPoolConfig;
+import com.mqttsnet.thinglinks.constant.CommonConstants;
 import com.mqttsnet.thinglinks.entity.acl.DeviceAclRule;
 import com.mqttsnet.thinglinks.entity.config.AuthProviderConfig;
 import com.mqttsnet.thinglinks.entity.config.PluginConfig;
+import com.mqttsnet.thinglinks.entity.device.DeviceInfo;
 import com.mqttsnet.thinglinks.entity.enumeration.ClientAclActionTypeEnum;
 import com.mqttsnet.thinglinks.entity.enumeration.DeviceAclRuleActionTypeEnum;
 import com.mqttsnet.thinglinks.util.AclMatcherUtil;
+import com.mqttsnet.thinglinks.util.AclTopicPatternPlaceholderReplacer;
 import com.mqttsnet.thinglinks.util.OkHttpUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -185,18 +188,18 @@ public final class BifromqAuthProviderPluginAuthProvider implements IAuthProvide
     private JSONObject clientConnectionAuthentication(String clientId, String password, String username, String cert, String remoteAddr, String channelId) {
         try {
             JSONObject jsonObject = new JSONObject();
-            jsonObject.put("clientIdentifier", clientId);
-            jsonObject.put("password", password);
-            jsonObject.put("username", username);
-            jsonObject.put("protocolType", "MQTT");
+            jsonObject.put(CommonConstants.CLIENT_IDENTIFIER, clientId);
+            jsonObject.put(CommonConstants.PASSWORD, password);
+            jsonObject.put(CommonConstants.USERNAME, username);
+            jsonObject.put(CommonConstants.PROTOCOL_TYPE, CommonConstants.MQTT_PROTOCOL_TYPE);
             jsonObject.put("remoteAddr", remoteAddr);
             jsonObject.put("channelId", channelId);
 
             if (StringUtils.isNotBlank(cert)) {
-                jsonObject.put("authMode", 1);
-                jsonObject.put("clientCertificate", cert);
+                jsonObject.put(CommonConstants.AUTH_MODE, 1);
+                jsonObject.put(CommonConstants.CLIENT_CERTIFICATE, cert);
             } else {
-                jsonObject.put("authMode", 0);
+                jsonObject.put(CommonConstants.AUTH_MODE, 0);
             }
 
             // 使用新工具类发送请求
@@ -225,7 +228,7 @@ public final class BifromqAuthProviderPluginAuthProvider implements IAuthProvide
             return createMQTT3RejectResponse("认证服务无响应");
         }
 
-        boolean certificationResult = response.getBooleanValue("certificationResult", false);
+        boolean certificationResult = response.getBooleanValue(CommonConstants.CERTIFICATION_RESULT, false);
         log.info("MQTT3认证响应 - 认证结果: {}", certificationResult);
 
         if (certificationResult) {
@@ -247,7 +250,7 @@ public final class BifromqAuthProviderPluginAuthProvider implements IAuthProvide
             return createMQTT5RejectResponse("认证服务无响应");
         }
 
-        boolean certificationResult = response.getBooleanValue("certificationResult", false);
+        boolean certificationResult = response.getBooleanValue(CommonConstants.CERTIFICATION_RESULT, false);
         log.info("MQTT5认证响应 - 认证结果: {}", certificationResult);
 
         if (certificationResult) {
@@ -265,7 +268,7 @@ public final class BifromqAuthProviderPluginAuthProvider implements IAuthProvide
      */
     private MQTT3AuthResult parseAuthResponseForMQTT3(String responseBody) {
         JSONObject responseJson = JSON.parseObject(responseBody);
-        boolean certificationResult = responseJson.getBooleanValue("certificationResult", false);
+        boolean certificationResult = responseJson.getBooleanValue(CommonConstants.CERTIFICATION_RESULT, false);
 
         if (certificationResult) {
             Ok.Builder okBuilder = buildOkResponse(responseJson);
@@ -282,7 +285,7 @@ public final class BifromqAuthProviderPluginAuthProvider implements IAuthProvide
      * @return {@link MQTT5AuthResult} MQTT5认证结果
      */
     private MQTT5AuthResult parseAuthResponseForMQTT5(JSONObject responseBody) {
-        boolean certificationResult = responseBody.getBooleanValue("certificationResult", false);
+        boolean certificationResult = responseBody.getBooleanValue(CommonConstants.CERTIFICATION_RESULT, false);
 
         if (certificationResult) {
             Ok.Builder okBuilder = buildOkResponse(responseBody);
@@ -307,22 +310,27 @@ public final class BifromqAuthProviderPluginAuthProvider implements IAuthProvide
      * @return {@link Ok.Builder} 包含认证信息的Ok构建器
      */
     private Ok.Builder buildOkResponse(JSONObject responseJson) {
-        Optional<JSONObject> deviceResultJson = Optional.ofNullable(responseJson.getJSONObject("deviceResult"));
-        String clientId = deviceResultJson.flatMap(json -> Optional.ofNullable(json.getString("clientId"))).orElse("");
-        String tenantId = Optional.ofNullable(responseJson.getString("tenantId")).orElse("");
+        Optional<DeviceInfo> deviceInfo = Optional.ofNullable(responseJson.getObject(CommonConstants.DEVICE_INFO_RESULT, DeviceInfo.class));
+        String tenantId = Optional.ofNullable(responseJson.getString(CommonConstants.TENANT_ID)).orElse("");
+        String deviceIdentification = deviceInfo.map(DeviceInfo::getDeviceIdentification).orElse("");
+        String clientId = deviceInfo.map(DeviceInfo::getClientId).orElse("");
+
+        Map<String, String> attrsMap = new HashMap<>();
+        // 认证接口返回的设备信息 （设备ID、设备名称等）将作为自定义属性附加到会话中。
+        deviceInfo.ifPresent(info -> attrsMap.put(CommonConstants.DEVICE_INFO, JSON.toJSONString(info)));
 
         //认证接口返回ACL 控制参数（ ACL 直接嵌入在令牌中。此信息将在发布/订阅期间用于访问控制。在当前工作流中，每个会话的 ClientInfo（在成功连接后填充）仅包含有限的保留元数据。）
-        Map<String, String> attrsMap = new HashMap<>();
-        String aclData = Optional.ofNullable(responseJson.getString("aclRuleResult")).orElse("");
-        if (StrUtil.isNotBlank(aclData)) {
-            attrsMap.put("acl", aclData);
-        }
+        Optional.ofNullable(responseJson.getJSONArray(CommonConstants.ACL_RULE_LIST_RESULT))
+                .filter(array -> !array.isEmpty())
+                .map(array -> array.toJavaList(DeviceAclRule.class))
+                .filter(list -> !list.isEmpty())
+                .ifPresent(rules -> attrsMap.put(CommonConstants.ACL_RULE, JSON.toJSONString(rules)));
 
-        log.info("Authentication successful - clientId: {}, tenantId: {}, ACL: {}", clientId, tenantId, aclData);
+        log.info("Authentication successful - clientId: {}, tenantId: {}, attrsMap: {}", clientId, tenantId, attrsMap);
 
         return Ok.newBuilder()
                 .setTenantId(tenantId)
-                .setUserId(clientId)
+                .setUserId(deviceIdentification)
                 .putAllAttrs(attrsMap);
     }
 
@@ -456,8 +464,8 @@ public final class BifromqAuthProviderPluginAuthProvider implements IAuthProvide
     /**
      * 执行客户端ACL权限检查
      *
-     * @param client 客户端信息
-     * @param action 客户端操作
+     * @param client 客户端信息，包含认证元数据
+     * @param action 客户端操作（PUB/SUB/UNSUB）
      * @return 检查结果（true表示允许，false表示拒绝）
      */
     @Override
@@ -466,6 +474,11 @@ public final class BifromqAuthProviderPluginAuthProvider implements IAuthProvide
         if (!aclConfig.isEnabled()) {
             return CompletableFuture.completedFuture(true);
         }
+        // 如果配置文件中 租户白名单 中包含当前租户ID，直接放行
+        if (aclConfig.getTenantWhitelist().contains(client.getTenantId())) {
+            return CompletableFuture.completedFuture(true);
+        }
+
         CacheKey cacheKey = buildAclCacheKey(client, action);
         Boolean cachedResult = aclCache.getIfPresent(cacheKey);
         if (cachedResult != null) {
@@ -525,49 +538,57 @@ public final class BifromqAuthProviderPluginAuthProvider implements IAuthProvide
      * - empty表示元数据中没有有效规则需要走API检查
      */
     private Optional<Boolean> checkAclFromClientMetadata(ClientInfo client, JSONObject aclRequest) {
-        // 步骤1：从元数据中提取ACL规则字符串
-        return Optional.ofNullable(client.getMetadataMap().get("acl"))
-                // 过滤空值
-                .filter(StrUtil::isNotBlank)
-                // 转换为ACL规则对象列表
-                .map(acl -> JSONArray.parseArray(acl, DeviceAclRule.class))
-                // 过滤空规则列表
-                .filter(rules -> !rules.isEmpty())
-                // 执行规则匹配
-                .flatMap(rules -> {
-                    // 步骤2：解析动作类型
-                    Optional<ClientAclActionTypeEnum> actionType = Optional.ofNullable(aclRequest.getInteger("actionType"))
-                            .flatMap(ClientAclActionTypeEnum::fromValue);
+        try {
+            // 步骤1：从元数据中提取ACL规则字符串
+            return Optional.ofNullable(client.getMetadataMap().get(CommonConstants.ACL_RULE))
+                    // 过滤空值
+                    .filter(StrUtil::isNotBlank)
+                    // 转换为ACL规则对象列表
+                    .map(acl -> JSONArray.parseArray(acl, DeviceAclRule.class))
+                    // 过滤空规则列表
+                    .filter(rules -> !rules.isEmpty())
+                    // 执行规则匹配
+                    .flatMap(rules -> {
+                        // 步骤2：解析动作类型
+                        Optional<ClientAclActionTypeEnum> actionType = Optional.ofNullable(aclRequest.getInteger(CommonConstants.ACTION_TYPE))
+                                .flatMap(ClientAclActionTypeEnum::fromValue);
 
-                    // 步骤3：转换为规则动作类型
-                    Optional<DeviceAclRuleActionTypeEnum> ruleActionType = actionType
-                            .flatMap(DeviceAclRuleActionTypeEnum::fromClientType);
+                        // 步骤3：转换为规则动作类型
+                        Optional<DeviceAclRuleActionTypeEnum> ruleActionType = actionType
+                                .flatMap(DeviceAclRuleActionTypeEnum::fromClientType);
 
-                    // 无效动作类型直接返回空
-                    if (ruleActionType.isEmpty()) {
-                        return Optional.empty();
-                    }
+                        // 无效动作类型直接返回空
+                        if (ruleActionType.isEmpty()) {
+                            return Optional.empty();
+                        }
 
-                    // 步骤4：过滤出适用的规则
-                    List<DeviceAclRule> filteredRules = rules.stream()
-                            .filter(DeviceAclRule::getEnabled)
-                            .filter(rule ->
-                                    rule.getActionType().equals(ruleActionType.get().getValue()) ||
-                                            rule.getActionType().equals(DeviceAclRuleActionTypeEnum.ALL.getValue())
-                            )
-                            .collect(Collectors.toList());
+                        // 步骤4：过滤出适用的规则
+                        List<DeviceAclRule> filteredRules = rules.stream()
+                                .filter(DeviceAclRule::getEnabled)
+                                .filter(rule ->
+                                        rule.getActionType().equals(ruleActionType.get().getValue()) ||
+                                                rule.getActionType().equals(DeviceAclRuleActionTypeEnum.ALL.getValue())
+                                )
+                                .collect(Collectors.toList());
 
-                    // 步骤5：如果没有适用的规则，返回empty回退到API检查
-                    if (filteredRules.isEmpty()) {
-                        return Optional.empty();
-                    }
+                        // 步骤5：如果没有适用的规则，返回empty回退到API检查
+                        if (filteredRules.isEmpty()) {
+                            return Optional.empty();
+                        }
 
-                    // 步骤6：执行主题匹配
-                    return Optional.of(AclMatcherUtil.isTopicAllowed(
-                            aclRequest.getString("topic"),
-                            filteredRules
-                    ));
-                });
+                        // 步骤6：执行主题匹配
+                        Optional<DeviceInfo> deviceInfoOptional = Optional.ofNullable(client.getMetadataMap().get(CommonConstants.DEVICE_INFO))
+                                .filter(StrUtil::isNotBlank)
+                                .map(deviceInfo -> JSON.parseObject(deviceInfo, DeviceInfo.class));
+                        AclTopicPatternPlaceholderReplacer.replacePlaceholders(filteredRules, deviceInfoOptional);
+                        return Optional.of(AclMatcherUtil.isTopicAllowed(
+                                aclRequest.getString(CommonConstants.TOPIC), filteredRules));
+                    });
+        } catch (Exception e) {
+            log.error("从客户端元数据中检查ACL权限失败（回退至API检查） - 错误信息: {}", e.getMessage());
+            return Optional.empty();
+        }
+
     }
 
     /**
@@ -610,22 +631,22 @@ public final class BifromqAuthProviderPluginAuthProvider implements IAuthProvide
         JSONObject aclRequest = new JSONObject();
 
         // 添加基础信息
-        aclRequest.put("tenantId", client.getTenantId());
-        aclRequest.put("protocolType", client.getType());
+        aclRequest.put(CommonConstants.TENANT_ID, client.getTenantId());
+        aclRequest.put(CommonConstants.PROTOCOL_TYPE, client.getType());
 
         // 安全处理 metadataMap
         Optional.of(client.getMetadataMap())
                 .ifPresent(metadataMap -> {
-                    aclRequest.put("clientIdentifier", metadataMap.getOrDefault("clientId", ""));
-                    aclRequest.put("userId", metadataMap.getOrDefault("userId", ""));
+                    aclRequest.put(CommonConstants.CLIENT_IDENTIFIER, metadataMap.getOrDefault(CommonConstants.CLIENT_ID, ""));
+                    aclRequest.put(CommonConstants.USER_ID, metadataMap.getOrDefault(CommonConstants.USER_ID, ""));
                     aclRequest.put("channelId", metadataMap.getOrDefault("channelId", ""));
                     aclRequest.put("broker", metadataMap.getOrDefault("broker", ""));
                     aclRequest.put("remoteAddr", metadataMap.getOrDefault("address", ""));
                 });
 
         // 添加操作相关参数
-        aclRequest.put("actionType", resolveActionType(action));
-        aclRequest.put("topic", resolveActionTopic(action));
+        aclRequest.put(CommonConstants.ACTION_TYPE, resolveActionType(action));
+        aclRequest.put(CommonConstants.TOPIC, resolveActionTopic(action));
 
         return aclRequest;
     }

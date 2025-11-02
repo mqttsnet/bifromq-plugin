@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 自定义线程池配置工具类
  *
  * @author Sun ShiHuan
- * @version 1.0.0
+ * @version 1.0.4
  * @since 2025/6/17
  */
 public final class ThreadPoolConfig {

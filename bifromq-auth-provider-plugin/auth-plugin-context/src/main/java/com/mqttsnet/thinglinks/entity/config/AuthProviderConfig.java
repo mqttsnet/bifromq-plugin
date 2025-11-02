@@ -1,5 +1,8 @@
 package com.mqttsnet.thinglinks.entity.config;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import lombok.Data;
 
 @Data
@@ -38,6 +41,9 @@ public class AuthProviderConfig {
         private String baseUrl;
         // ACL 检查接口路径
         private String aclCheckEndpoint;
+
+        // 租户白名单（开启后，只有白名单中的租户ID不会进行ACL校验）
+        private List<String> tenantWhitelist = new ArrayList<>();
 
         // ACL 缓存配置
         private CacheConfig cache = new CacheConfig();

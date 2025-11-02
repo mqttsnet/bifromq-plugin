@@ -14,7 +14,7 @@ import okhttp3.Response;
  * Description:
  * SmartRetryInterceptor is an interceptor for OkHttp that implements a smart retry mechanism.
  * @author mqttsnet
- * @version 1.0.0
+ * @version 1.0.4
  * @since 2025/6/9
  */
 public class SmartRetryInterceptor implements Interceptor {

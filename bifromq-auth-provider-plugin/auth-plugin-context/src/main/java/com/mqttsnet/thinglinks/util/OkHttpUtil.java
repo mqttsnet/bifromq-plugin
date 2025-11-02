@@ -24,7 +24,7 @@ import okhttp3.Response;
  * <p>使用泛型支持任意响应类型，通过 ResponseConverter 接口实现响应转换</p>
  *
  * @author mqttsnet
- * @version 1.0.0
+ * @version 1.0.4
  * @since 2025/6/9
  */
 @Slf4j
@@ -40,13 +40,13 @@ public class OkHttpUtil {
     static {
         ConnectionPool connectionPool = new ConnectionPool(50, 5, TimeUnit.MINUTES);
         Dispatcher dispatcher = new Dispatcher();
-        dispatcher.setMaxRequests(200);
+        dispatcher.setMaxRequests(1000);
         dispatcher.setMaxRequestsPerHost(50);
 
         DEFAULT_CLIENT = new OkHttpClient.Builder()
-                .connectTimeout(15, TimeUnit.SECONDS)   // 连接超时15秒
-                .readTimeout(30, TimeUnit.SECONDS)      // 读取超时30秒
-                .writeTimeout(30, TimeUnit.SECONDS)     // 写入超时30秒
+                .connectTimeout(10, TimeUnit.SECONDS)   // 连接超时10秒
+                .readTimeout(5, TimeUnit.SECONDS)      // 读取超时5秒
+                .writeTimeout(5, TimeUnit.SECONDS)     // 写入超时5秒
                 .retryOnConnectionFailure(true)
                 .connectionPool(connectionPool)         // 连接池配置
                 .dispatcher(dispatcher)                 // 调度器配置
@@ -56,7 +56,8 @@ public class OkHttpUtil {
                 ))
                 .build();
 
-        log.info("OkHttpUtils 初始化完成，默认重试次数：{}，连接池大小：{}", DEFAULT_RETRY_COUNT, connectionPool.connectionCount());
+        log.info("OkHttp工具类初始化完成 - 最大重试次数: {}, 连接池: {}/{} (活跃/空闲)",
+                DEFAULT_RETRY_COUNT, connectionPool.connectionCount(), connectionPool.idleConnectionCount());
     }
 
     /**
@@ -83,7 +84,7 @@ public class OkHttpUtil {
     public static void addGlobalHeader(String key, String value) {
         if (key != null && value != null) {
             GLOBAL_HEADERS.put(key, value);
-            log.debug("添加全局请求头: {} = {}", key, value);
+            log.debug("添加全局请求头 - {}: {}", key, value);
         }
     }
 
@@ -94,8 +95,8 @@ public class OkHttpUtil {
      */
     public static void removeGlobalHeader(String key) {
         if (key != null) {
-            GLOBAL_HEADERS.remove(key);
-            log.debug("移除全局请求头: {}", key);
+            String removed = GLOBAL_HEADERS.remove(key);
+            log.debug("移除全局请求头 - {}: {}", key, removed);
         }
     }
 
@@ -106,7 +107,7 @@ public class OkHttpUtil {
      */
     public static void setCustomClient(OkHttpClient client) {
         customClient = client;
-        log.info("设置自定义 OkHttpClient 实例");
+        log.info("设置自定义OkHttpClient实例 - 客户端: {}", client != null ? client.toString() : "null");
     }
 
     // 获取当前使用的客户端实例
@@ -119,6 +120,7 @@ public class OkHttpUtil {
         GLOBAL_HEADERS.forEach((key, value) -> {
             if (key != null && value != null) {
                 builder.addHeader(key, value);
+                log.trace("应用全局请求头 - {}: {}", key, value);
             }
         });
         return builder;
@@ -223,13 +225,14 @@ public class OkHttpUtil {
      * @throws IOException 网络请求异常
      */
     public static <T> Optional<T> sendPostRequest(String url, String jsonBody, Map<String, String> headers, ResponseConverter<T> converter) throws IOException {
-        // 参数校验
+        long startTime = System.currentTimeMillis();
+
         if (url == null || url.trim().isEmpty()) {
-            log.warn("POST 请求 URL 不能为空");
+            log.warn("POST请求失败 - URL为空");
             return Optional.empty();
         }
         if (jsonBody == null) {
-            log.warn("JSON 请求体不能为空");
+            log.warn("POST请求失败 - 空JSON请求体, URL: {}", url);
             return Optional.empty();
         }
 
@@ -240,18 +243,39 @@ public class OkHttpUtil {
                 .url(url)
                 .post(body);
         applyGlobalHeaders(builder);
+
         if (headers != null) {
             headers.forEach((key, value) -> {
                 if (key != null && value != null) {
                     builder.addHeader(key, value);
+                    log.trace("添加请求头 - {}: {}", key, value);
                 }
             });
         }
 
-        try (Response response = getClient().newCall(builder.build()).execute()) {
+        Request request = builder.build();
+        log.debug("发送POST请求 - URL: {}, 请求头: {}个, 请求体大小: {}字节",
+                url,
+                headers != null ? headers.size() : 0,
+                jsonBody.length());
+
+        try (Response response = getClient().newCall(request).execute()) {
+            long elapsed = System.currentTimeMillis() - startTime;
+            log.debug("POST请求完成 - URL: {}, 状态码: {}, 耗时: {}ms, 响应体大小: {}字节",
+                    url,
+                    response.code(),
+                    elapsed,
+                    response.body() != null ? response.body().contentLength() : 0);
+
             return handleResponse(response, converter);
         } catch (IOException e) {
-            log.error("POST 请求失败: {} | 错误: {}", url, e.getMessage());
+            long elapsed = System.currentTimeMillis() - startTime;
+            log.error("POST请求失败 - URL: {}, 错误: {}, 耗时: {}ms, 请求体大小: {}字节",
+                    url,
+                    e.getMessage(),
+                    elapsed,
+                    jsonBody.length(),
+                    e);
             throw e;
         }
     }
@@ -266,9 +290,10 @@ public class OkHttpUtil {
      * @throws IOException 网络请求异常
      */
     public static int sendPostRequestForStatus(String url, String jsonBody, Map<String, String> headers) throws IOException {
-        // 参数校验
+        long startTime = System.currentTimeMillis();
+
         if (url == null || url.trim().isEmpty()) {
-            log.warn("POST 请求 URL 不能为空");
+            log.warn("POST请求(仅状态)失败 - URL为空");
             return -1;
         }
 
@@ -279,18 +304,32 @@ public class OkHttpUtil {
                 .url(url)
                 .post(body);
         applyGlobalHeaders(builder);
+
         if (headers != null) {
             headers.forEach((key, value) -> {
                 if (key != null && value != null) {
                     builder.addHeader(key, value);
+                    log.trace("添加请求头 - {}: {}", key, value);
                 }
             });
         }
 
-        try (Response response = getClient().newCall(builder.build()).execute()) {
-            return response.code();
+        Request request = builder.build();
+        log.debug("发送POST请求(仅状态) - URL: {}, 请求头: {}个, 请求体大小: {}字节",
+                url,
+                headers != null ? headers.size() : 0,
+                jsonBody.length());
+
+        try (Response response = getClient().newCall(request).execute()) {
+            int status = response.code();
+            long elapsed = System.currentTimeMillis() - startTime;
+            log.debug("POST请求(仅状态)完成 - URL: {}, 状态码: {}, 耗时: {}ms",
+                    url, status, elapsed);
+            return status;
         } catch (IOException e) {
-            log.error("POST 请求失败: {} | 错误: {}", url, e.getMessage());
+            long elapsed = System.currentTimeMillis() - startTime;
+            log.error("POST请求(仅状态)失败 - URL: {}, 错误: {}, 耗时: {}ms",
+                    url, e.getMessage(), elapsed, e);
             throw e;
         }
     }
@@ -304,22 +343,39 @@ public class OkHttpUtil {
      * @throws IOException 读取响应体异常
      */
     private static <T> Optional<T> handleResponse(Response response, ResponseConverter<T> converter) throws IOException {
-        if (!response.isSuccessful() || response.body() == null) {
-            log.warn("请求失败，状态码: {}", response.code());
+        if (response == null) {
+            log.warn("处理响应失败 - 响应对象为null");
             return Optional.empty();
         }
 
-        String responseBody = response.body().string();
-        if (responseBody == null || responseBody.isEmpty()) {
-            log.warn("响应体为空");
+        if (!response.isSuccessful()) {
+            log.warn("请求失败 - 状态码: {}, 响应头: {}", response.code(), response.headers());
+            return Optional.empty();
+        }
+
+        if (response.body() == null) {
+            log.warn("空响应体 - 状态码: {}", response.code());
             return Optional.empty();
         }
 
         try {
+            String responseBody = response.body().string();
+            if (responseBody == null || responseBody.isEmpty()) {
+                log.warn("空响应体内容 - 状态码: {}", response.code());
+                return Optional.empty();
+            }
+
+            if (converter == null) {
+                log.error("响应转换失败 - 转换器为null");
+                return Optional.empty();
+            }
+
             T result = converter.convert(responseBody);
+            log.trace("响应转换成功 - 响应体: {}", responseBody);
             return Optional.ofNullable(result);
         } catch (Exception e) {
-            log.error("响应转换失败: {}", e.getMessage());
+            log.error("响应处理失败 - 状态码: {}, 错误: {}",
+                    response.code(), e.getMessage(), e);
             return Optional.empty();
         }
     }

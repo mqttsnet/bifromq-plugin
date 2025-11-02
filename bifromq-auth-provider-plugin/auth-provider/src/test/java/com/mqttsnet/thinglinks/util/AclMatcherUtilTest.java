@@ -15,7 +15,7 @@ import lombok.extern.slf4j.Slf4j;
  * ACL 匹配工具类测试类
  * 覆盖所有 MQTT 规范要求的边界情况
  * @author mqttsnet
- * @version 1.0.0
+ * @version 1.0.4
  * @since 2025/6/14
  */
 @Slf4j

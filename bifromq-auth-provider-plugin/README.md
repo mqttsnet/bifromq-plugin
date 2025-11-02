@@ -62,7 +62,7 @@ authProviderConfig:
 mvn clean package
 ```
 
-构建成功后，插件包将生成在 `target/` 目录中，例如 `target/bifromq-auth-provider-plugin-1.0.0.zip`。
+构建成功后，插件包将生成在 `target/` 目录中，例如 `target/bifromq-auth-provider-plugin-1.0.4.zip`。
 
 ### 3. 部署和加载插件
 

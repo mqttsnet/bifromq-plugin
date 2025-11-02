@@ -3,19 +3,21 @@ authProviderConfig:
   # 认证服务配置
   auth:
     # 基础服务地址（填写ThingLinks网关地址）,baseUrl+clientAuthEndpoint 为完整访问路径，请保证必须正确
-    baseUrl: http://127.0.0.1:19100
+    baseUrl: http://127.0.0.1:18760
     # 客户端连接认证接口
-    clientAuthEndpoint: /link/deviceOpenAny/clientConnectionAuthentication
+    clientAuthEndpoint: /link/anyTenant/deviceOpen/clientConnectionAuthentication
   # ACL 服务配置
   acl:
-    # 是否启用 ACL 检查
+    # 是否启用 ACL 检查(开启后，设备的发布、订阅、取消订阅等操作需要进行ACL校验，如果未配置ACL规则，默认拒绝操作)
     enabled: false
-    # 基础服务地址（填写ThingLinks网关地址）
-    baseUrl: http://127.0.0.1:19100
+    # 基础服务地址（填写ThingLinks网关地址）,baseUrl+aclCheckEndpoint 为完整访问路径，请保证必须正确
+    baseUrl: http://127.0.0.1:18760
     # ACL校验接口
-    aclCheckEndpoint: /link/deviceOpenAny/clientAclValidation
+    aclCheckEndpoint: /link/anyTenant/deviceOpen/clientAclValidation
+    # 租户白名单（开启后，只有白名单中的租户ID不会进行ACL校验）
+    tenantWhitelist: [ ]      # 空列表表示不开启白名单，所有租户ID都进行ACL校验（多个英文逗号分隔）
     cache:
-      maxSize: 1000000         # 100万最大容量
-      expireMinutes: 10       # 10分钟过期
-      refreshAfterWrite: 2    # 2分钟后后台刷新(时间≤过期时间)
-      recordStats: true       # 开启统计
+      maxSize: 2000000         # 200万最大容量
+      expireMinutes: 10       # 10分钟过期(单位：分钟)
+      refreshAfterWrite: 2    # 2分钟后后台刷新(单位：分钟)，刷新时间≤过期时间
+      recordStats: true       # 开启统计(开启后，会记录缓存命中率等统计信息)

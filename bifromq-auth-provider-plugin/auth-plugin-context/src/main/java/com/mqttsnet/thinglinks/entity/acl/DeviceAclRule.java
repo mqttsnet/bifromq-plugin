@@ -71,14 +71,6 @@ public class DeviceAclRule implements Serializable {
      */
     private Boolean enabled;
     /**
-     * 备注
-     */
-    private String remark;
-    /**
-     * 创建人组织
-     */
-    private Long createdOrgId;
-    /**
      * 产品标识
      */
     private String productIdentification;
