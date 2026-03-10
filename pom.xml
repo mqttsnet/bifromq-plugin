@@ -7,15 +7,13 @@
     <!-- 项目信息 -->
     <groupId>com.mqttsnet.thinglinks</groupId>
     <artifactId>bifromq-plugin</artifactId>
-    <version>1.0.0</version>
+    <version>${revision}</version>
     <packaging>pom</packaging>
 
 
     <name>bifromq-plugin</name>
-    <url>https://www.mqttsnet.com</url>
-    <description>A comprehensive collection of modular and hot-swappable plugin examples, designed to demonstrate the
-        dynamic extension and customization capabilities of the ThingLinks platform using the Open EXP framework.
-    </description>
+    <url>https://thinglinks.mqttsnet.com</url>
+    <description>The Bifromq plugin library, which is used to handle the plugin mechanism of Bifromq, enables users to integrate custom business with the ThingLinks IoT business system at runtime.</description>
 
     <modules>
         <module>bifromq-auth-provider-plugin</module>
@@ -35,6 +33,8 @@
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+        <revision>1.0.8</revision>
     </properties>
 
     <repositories>

@@ -17,9 +17,9 @@
     </modules>
 
     <properties>
-        <revision>1.0.6</revision>
+        <revision>1.0.8</revision>
         <bifromq.version>3.3.5</bifromq.version>
-        <thinglinks-util.version>1.0.6</thinglinks-util.version>
+        <thinglinks-util.version>1.0.8</thinglinks-util.version>
         <pf4j.version>3.10.0</pf4j.version>
         <slf4j.version>1.7.30</slf4j.version>
         <logback.version>1.2.13</logback.version>

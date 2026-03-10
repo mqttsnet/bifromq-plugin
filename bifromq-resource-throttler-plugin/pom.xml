@@ -4,7 +4,7 @@
 
     <groupId>com.mqttsnet.thinglinks</groupId>
     <artifactId>bifromq-resource-throttler-plugin</artifactId>
-    <version>1.0.0</version>
+    <version>${revision}</version>
     <packaging>pom</packaging>
 
     <name>BifromqResourceThrottlerPlugin</name>
@@ -16,6 +16,7 @@
     </modules>
 
     <properties>
+        <revision>1.0.8</revision>
         <bifromq.version>3.3.5</bifromq.version>
         <pf4j.version>3.10.0</pf4j.version>
         <slf4j.version>1.7.30</slf4j.version>

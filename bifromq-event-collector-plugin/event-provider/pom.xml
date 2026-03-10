@@ -6,14 +6,13 @@
     <parent>
         <groupId>com.mqttsnet.thinglinks</groupId>
         <artifactId>bifromq-event-collector-plugin</artifactId>
-        <version>1.0.0</version>
+        <version>${revision}</version>
     </parent>
 
     <artifactId>event-provider</artifactId>
-    <version>1.0.0</version>
 
     <name>${project.artifactId}</name>
-    <url>https://www.mqttsnet.com</url>
+    <url>https://thinglinks.mqttsnet.com</url>
     <description>event-provider</description>
 
     <dependencies>
@@ -24,7 +23,7 @@
         <dependency>
             <groupId>com.mqttsnet.thinglinks</groupId>
             <artifactId>event-plugin-context</artifactId>
-            <version>1.0.0</version>
+            <version>${revision}</version>
         </dependency>
         <dependency>
             <groupId>com.baidu.bifromq</groupId>

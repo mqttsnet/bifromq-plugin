@@ -12,7 +12,7 @@
     <artifactId>auth-provider</artifactId>
 
     <name>${project.artifactId}</name>
-    <url>https://www.mqttsnet.com</url>
+    <url>https://thinglinks.mqttsnet.com</url>
     <description>auth-provider</description>
 
     <dependencies>

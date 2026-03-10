@@ -19,6 +19,11 @@ import com.mqttsnet.thinglinks.config.PluginConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.pf4j.Extension;
 
+/**
+ * 提供租户级别的指标来衡量资源的数量和速率，包括计数器、仪表和摘要指标。
+ *
+ * @author mqttsnet
+ */
 @Slf4j
 @Extension
 public class BifromqResourceThrottlerPluginResourceThrottlerProvider implements IResourceThrottler {
@@ -29,17 +34,27 @@ public class BifromqResourceThrottlerPluginResourceThrottlerProvider implements 
     /**
      * 构造函数，通过 {@link BifromqResourceThrottlerContext} 初始化配置。
      *
-     * @param context {@link BifromqResourceThrottlerContext} 认证插件的上下文，包含配置信息。
+     * @param context {@link BifromqResourceThrottlerContext} 插件的上下文，包含配置信息。
      */
     public BifromqResourceThrottlerPluginResourceThrottlerProvider(BifromqResourceThrottlerContext context) {
         this.pluginConfig = context.getPluginConfig();
     }
 
+    /**
+     * Determine if the tenant has enough resource of given type
+     *
+     * @param tenantId the id of the tenant
+     * @param type     the resource type
+     * @return true for there is enough resource of given type for the tenant
+     */
     @Override
-    public boolean hasResource(String s, TenantResourceType tenantResourceType) {
+    public boolean hasResource(String tenantId, TenantResourceType type) {
         //此方法在BifroMQ的工作线程被上同步调用，需要确保其实现的高效，以避免影响BifroMQ性能。
         // 当方法返回false时将产生限制行为，同时生成一个ResourceThrottling事件，并报告给Event Collector
-        return pluginConfig.getIsEnableHasResource();
+        log.info("hasResource tenantId={}, type={}", tenantId, type);
+        // TODO 请求 资源限制服务，判断租户是否有足够的资源
+
+        return true;
     }
 
     @Override

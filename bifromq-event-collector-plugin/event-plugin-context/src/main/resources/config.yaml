@@ -1,3 +1,69 @@
 eventCollectorConfig:
-  # The kafka topic to which the events are published
-  kafkaBootstrapServer: "127.0.0.1:9092"
+  # ==================== Kafka核心配置 ====================
+  kafka:
+    # 【必须】Kafka服务器地址列表
+    bootstrapServers: "127.0.0.1:9092"
+
+    # ==================== 生产者配置 ====================
+    producer:
+      # 【核心】SASL认证配置（如未开启SASL认证，可不配置,将下列SASL配置项注释掉即可）
+      # 安全协议：SASL_PLAINTEXT 或 SASL_SSL
+      #securityProtocol: SASL_PLAINTEXT
+      #sasl:
+        # SASL机制：PLAIN/SCRAM-SHA-256/SCRAM-SHA-512
+        #mechanism: PLAIN
+        #jaas:
+          # 【重要】不同mechanism 使用的 org.apache.kafka.common.security 不同，请根据实际情况配置，JAAS配置必须以分号结尾
+          #config: "org.apache.kafka.common.security.plain.PlainLoginModule required username='admin' password='123456';"
+
+      # 【核心】事务配置
+      # 开启事务，必须在开启了事务的方法中发送，否则报错
+      transactionIdPrefix: "kafkaTx-"
+
+      # 【核心】重试配置
+      # 发生错误后，消息重发的次数。可以设置为Integer.MAX_VALUE以进行无限次重试。开启事务必须设置大于0。
+      retries: 5
+
+      # 【核心】消息确认机制
+      # acks=0 ：生产者在成功写入消息之前不会等待任何来自服务器的响应。
+      # acks=1 ：只要集群的首领节点收到消息，生产者就会收到一个来自服务器的成功响应。
+      # acks=all ：只有当所有参与复制的节点全部收到消息时，生产者才会收到一个来自服务器的成功响应。
+      # 开启事务时，必须设置为all。
+      acks: "all"
+
+      # 【核心】批量提交配置
+      # 当有多个消息需要被发送到同一个分区时，生产者会把它们放在同一个批次里。该参数指定了一个批次可以使用的内存大小，按照字节数计算。
+      batchSize: 16384
+
+      # 【核心】生产者内存缓冲区的大小，用于缓存待发送的消息批次
+      bufferMemory: 33554432  # 32MB，增加以支持更大的消息批次
+
+      # 【核心】消息延迟发送的时间，等待更多消息进入批次，优化吞吐量
+      lingerMs: 50
+
+      # 【核心】生产者尝试发送消息的最大时间，超过此时间未成功则放弃
+      deliveryTimeoutMs: 120000  # 2分钟超时
+
+      # 【核心】序列化配置
+      keySerializer: "org.apache.kafka.common.serialization.StringSerializer"
+      valueSerializer: "org.apache.kafka.common.serialization.StringSerializer"
+
+      # 【核心】幂等性配置，防止消息重复
+      enableIdempotence: true
+
+      # 【核心】最大阻塞时间，当缓冲区满或元数据不可用时
+      maxBlockMs: 60000
+
+      # 【核心】请求超时时间
+      requestTimeoutMs: 30000
+
+      # 【核心】重试间隔配置
+      retryBackoffMs: 100
+      reconnectBackoffMs: 50
+      reconnectBackoffMaxMs: 1000
+
+      # 【核心】压缩配置，减少网络传输量
+      compressionType: "snappy"
+
+      # 【核心】元数据最大年龄，定期刷新元数据
+      metadataMaxAgeMs: 300000

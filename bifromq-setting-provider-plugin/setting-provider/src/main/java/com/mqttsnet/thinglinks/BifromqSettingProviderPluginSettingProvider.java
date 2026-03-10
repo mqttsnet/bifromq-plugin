@@ -56,7 +56,7 @@ public final class BifromqSettingProviderPluginSettingProvider implements ISetti
     /**
      * 构造函数，通过 {@link BifromqSettingProviderContext} 初始化配置。
      *
-     * @param context {@link BifromqSettingProviderContext} 认证插件的上下文，包含配置信息。
+     * @param context {@link BifromqSettingProviderContext} 插件的上下文，包含配置信息。
      */
     public BifromqSettingProviderPluginSettingProvider(BifromqSettingProviderContext context) {
         this.pluginConfig = context.getPluginConfig();
